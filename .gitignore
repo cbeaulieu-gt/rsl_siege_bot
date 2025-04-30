@@ -127,3 +127,14 @@ cython_debug/
 
 # Added secrets.py to the .gitignore file
 config.py
+
+# Ignore Excel files
+*.xlsm
+
+# Ignore image files
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
