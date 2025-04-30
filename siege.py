@@ -1,7 +1,8 @@
 import os.path
 from collections import namedtuple
 
-from discord_api.discord import post_image, post_message, format_discord_link
+import click
+from discord_api.discord import DiscordAPI
 from excel import export_range_as_image, compare_sheets_between_workbooks
 
 sheet = namedtuple("Sheet", ["name", "cell_range"])
@@ -39,24 +40,26 @@ current_file_path = os.path.join(root, get_siege_file_name(upcoming_siege_date))
 assignment_sheet_image = export_siege_sheet(root, assignment_sheet)
 reserves_sheet_image = export_siege_sheet(root, reserves_sheet)
 
-  # Replace with your channel name
-channel = "clan-siege-assignment-images"
-assignment_response = post_image(assignment_sheet_image, channel)
-reserves_response = post_image(reserves_sheet_image, channel)
+@click.command()
+@click.option('--guildid', default='1298470807915331738', help='The GUILDID to use for running commands.')
+def main(guildid):
+    """Main entry point for the script."""
+    print(f"Using GUILDID: {guildid}")
 
-# formatted_msg_link = format_discord_link(channel, assignment_response.id)
-# post_message(f"Siege Assignments Posted here {formatted_msg_link}", channel)
-# print(f"Assignment Image URL: {assignment_response.cdn_url}")
-# print(f"Reserves Image URL: {reserves_response.cdn_url}")
+    discord_api = DiscordAPI(guildid)
 
-channel = "clan-siege-assignments"
-message = "--------------------------------------------------------------" \
-            f"\n**Siege Assignments - {upcoming_siege_date}**\n" \
-            "--------------------------------------------------------------"
-post_message(message, channel)
-post_message(assignment_response.cdn_url, channel)
-post_message(reserves_response.cdn_url, channel)
+    # Replace with your channel name
+    channel = "clan-siege-assignment-images"
+    assignment_response = discord_api.post_image(assignment_sheet_image, channel)
+    reserves_response = discord_api.post_image(reserves_sheet_image, channel)
 
+    channel = "clan-siege-assignments"
+    message = "--------------------------------------------------------------" \
+                f"\n**Siege Assignments - {upcoming_siege_date}**\n" \
+                "--------------------------------------------------------------"
+    discord_api.post_message(message, channel)
+    discord_api.post_message(assignment_response.cdn_url, channel)
+    discord_api.post_message(reserves_response.cdn_url, channel)
 
-# diff = compare_sheets_between_workbooks(old_file_path, current_file_path, sheet_name, cell_range)
-# print(diff)
+if __name__ == '__main__':
+    main()

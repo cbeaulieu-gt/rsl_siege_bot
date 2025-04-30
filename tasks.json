@@ -1,0 +1,11 @@
+{
+	"label": "Run siege.py with GUILD_ID 1112031869337346184",
+	"type": "python",
+	"command": "${workspaceFolder}/siege.py",
+	"args": ["--guildid", "1112031869337346184"],
+	"group": {
+		"kind": "build",
+		"isDefault": false
+	},
+	"detail": "Run the siege.py script with the specified GUILD_ID."
+}
