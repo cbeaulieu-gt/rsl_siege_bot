@@ -1,0 +1,94 @@
+import discord
+from discord.ext import commands
+import asyncio
+
+class DiscordAPI:
+    def __init__(self, guild_id, bot_token):
+        self.guild_id = guild_id
+        intents = discord.Intents.default()
+        intents.messages = True
+        intents.guilds = True
+        intents.members = True
+        self.bot = commands.Bot(command_prefix="!", intents=intents)
+
+        if not bot_token:
+            raise ValueError("Bot token is required.")
+
+        self.bot_token = bot_token
+        self.bot_ready = False
+
+        @self.bot.event
+        async def on_ready():
+            self.bot_ready = True
+            print("Bot is ready!")
+
+    async def start_bot(self):
+        """
+        Starts the bot in the background.
+        """
+        loop = asyncio.get_event_loop()
+        loop.create_task(self.bot.start(self.bot_token))
+
+    async def wait_until_ready(self):
+        while not self.bot_ready:
+            print("Waiting for the bot to initialize...")
+            await asyncio.sleep(1)
+
+    async def get_channel_id_by_name(self, channel_name):
+        await self.wait_until_ready()
+        """
+        Retrieves the channel ID for a given channel name.
+        """
+        guild = discord.utils.get(self.bot.guilds, id=int(self.guild_id))
+        if not guild:
+            raise ValueError(f"Guild with ID {self.guild_id} not found.")
+
+        channel = discord.utils.get(guild.channels, name=channel_name)
+        if not channel:
+            raise ValueError(f"Channel '{channel_name}' not found in guild '{self.guild_id}'.")
+
+        return channel.id
+
+    async def post_message(self, channel_name, message):
+        await self.wait_until_ready()
+        """
+        Posts a message to a specified Discord channel.
+        """
+        channel_id = await self.get_channel_id_by_name(channel_name)
+        channel = self.bot.get_channel(channel_id)
+        if not channel:
+            raise ValueError(f"Channel with ID {channel_id} not found.")
+
+        return await channel.send(message)
+
+    async def post_image(self, channel_name, image_path):
+        await self.wait_until_ready()
+        """
+        Publishes an image to a Discord channel.
+        """
+        channel_id = await self.get_channel_id_by_name(channel_name)
+        channel = self.bot.get_channel(channel_id)
+        if not channel:
+            raise ValueError(f"Channel with ID {channel_id} not found.")
+
+        return await channel.send(file=discord.File(image_path))
+
+    async def get_guild_members(self):
+        await self.wait_until_ready()
+        """
+        Retrieves a list of all members in the guild along with their Discord name, guild nickname, and roles.
+        """
+        guild = discord.utils.get(self.bot.guilds, id=int(self.guild_id))
+        if not guild:
+            raise ValueError(f"Guild with ID {self.guild_id} not found.")
+
+        members_info = []
+        for member in guild.members:
+            member_info = {
+            "discord_name": member.name,
+            "nickname": member.nick,
+            "roles": [role.name for role in member.roles if role.name != "@everyone"]
+            }
+            members_info.append(member_info)
+
+        return members_info

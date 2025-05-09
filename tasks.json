@@ -1,11 +1,22 @@
 {
-	"label": "Run siege.py with GUILD_ID 1112031869337346184",
-	"type": "python",
-	"command": "${workspaceFolder}/siege.py",
-	"args": ["--guildid", "1112031869337346184"],
+	"label": "Run Siege Command",
+	"type": "shell",
+	"command": "python",
+	"args": ["-m", "cli", "run_siege", "--guild", "Personal"],
 	"group": {
 		"kind": "build",
 		"isDefault": false
 	},
-	"detail": "Run the siege.py script with the specified GUILD_ID."
+	"detail": "Run the run_siege command with the guild name as argument."
+},
+{
+	"label": "Fetch Channel Members",
+	"type": "shell",
+	"command": "python",
+	"args": ["-m", "cli", "fetch_channel_members", "--guild", "Personal", "--channel", "example-channel"],
+	"group": {
+		"kind": "build",
+		"isDefault": true
+	},
+	"detail": "Run the fetch_channel_members command with the guild name as argument."
 }

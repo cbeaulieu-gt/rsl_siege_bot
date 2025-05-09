@@ -1,9 +1,13 @@
+import asyncio
 import os.path
 from collections import namedtuple
+import configparser
+import re
 
 import click
-from discord_api.discord import DiscordAPI
+from discord_api.discordClient import DiscordAPI
 from excel import export_range_as_image, compare_sheets_between_workbooks
+from config import *
 
 sheet = namedtuple("Sheet", ["name", "cell_range"])
 
@@ -26,40 +30,143 @@ def export_siege_sheet(path: str, xl_sheet: sheet) -> str:
     assignments_image_path = export_range_as_image(current_file_path, xl_sheet.name, xl_sheet.cell_range, output_file)
     return assignments_image_path
 
-root = "E:\\My Files\\Games\\Raid Shadow Legends\\siege\\data\\"
+config = configparser.ConfigParser()
+config.read('guild_config.ini')
 
-last_siege_date = "04/15/2025"  # Replace with your date
-upcoming_siege_date = "04/29/2025"  # Replace with your date
+def get_guild_id(guild_name):
+    if guild_name in config['Guilds']:
+        return config['Guilds'][guild_name]
+    else:
+        raise ValueError(f"Guild name '{guild_name}' not found in configuration.")
+
+root = "E:\\My Files\\Games\\Raid Shadow Legends\\siege\\"
+
+def extract_date_from_filename(filename):
+    match = re.search(r'clan_siege_(\d{2})_(\d{2})_(\d{4})', filename)
+    if match:
+        month, day, year = match.groups()
+        return f"{year}-{month}-{day}"
+    return None
+
+def get_recent_siege_files(root):
+    siege_files = []
+    for file in os.listdir(root):
+        if file.endswith('.xlsm'):
+            date_str = extract_date_from_filename(file)
+            if date_str:
+                siege_files.append((file, date_str))
+
+    # Sort files by date in descending order
+    siege_files.sort(key=lambda x: x[1], reverse=True)
+
+    if len(siege_files) < 2:
+        raise ValueError("Not enough siege files found in the directory.")
+
+    return siege_files[0], siege_files[1]  # Most recent and second most recent
+
+# Scan the root folder for siege files
+most_recent_file, second_most_recent_file = get_recent_siege_files(root)
+
+# Confirm with the user
+print(f"Most recent file (upcoming siege): {most_recent_file[0]} with date {most_recent_file[1]}")
+print(f"Second most recent file (last siege): {second_most_recent_file[0]} with date {second_most_recent_file[1]}")
+
+confirmation = input("Do you want to proceed with these files? (yes/no): ").strip().lower()
+if confirmation != 'yes':
+    raise SystemExit("Operation cancelled by the user.")
+
+# Assign file paths
+current_file_path = os.path.join(root, most_recent_file[0])
+old_file_path = os.path.join(root, second_most_recent_file[0])
 
 assignment_sheet = sheet("Assignments", "A1:E42")
 reserves_sheet = sheet("Reserves", "A1:D28")
 
-old_file_path = os.path.join(root, get_siege_file_name(last_siege_date)) # Path to the Excel file
-current_file_path = os.path.join(root, get_siege_file_name(upcoming_siege_date)) # Path to the Excel file
+async def initialize_discord_client(guild_name, bot_token):
+    guild_id = get_guild_id(guild_name)
+    print(f"Using GUILDID: {guild_id}")
+    discord_client = DiscordAPI(guild_id, bot_token=bot_token)
 
-assignment_sheet_image = export_siege_sheet(root, assignment_sheet)
-reserves_sheet_image = export_siege_sheet(root, reserves_sheet)
+    await discord_client.start_bot()  # Start the bot in the background
+    await discord_client.wait_until_ready()
 
-@click.command()
-@click.option('--guildid', default='1298470807915331738', help='The GUILDID to use for running commands.')
-def main(guildid):
-    """Main entry point for the script."""
-    print(f"Using GUILDID: {guildid}")
+    return discord_client
 
-    discord_api = DiscordAPI(guildid)
+async def main_function(guild_name):
+    discord_client = await initialize_discord_client(guild_name, BOTTOKEN)
 
-    # Replace with your channel name
+    assignment_sheet_image = export_siege_sheet(root, assignment_sheet)
+    reserves_sheet_image = export_siege_sheet(root, reserves_sheet)
+
     channel = "clan-siege-assignment-images"
-    assignment_response = discord_api.post_image(assignment_sheet_image, channel)
-    reserves_response = discord_api.post_image(reserves_sheet_image, channel)
+    try:
+        assignment_response = await discord_client.post_image(channel, assignment_sheet_image)
+        reserves_response = await discord_client.post_image(channel, reserves_sheet_image)
+    except Exception as e:
+        raise RuntimeError(f"Failed to post images to Discord: {e}")
 
     channel = "clan-siege-assignments"
     message = "--------------------------------------------------------------" \
-                f"\n**Siege Assignments - {upcoming_siege_date}**\n" \
+                f"\n**Siege Assignments - {most_recent_file[1]}**\n" \
                 "--------------------------------------------------------------"
-    discord_api.post_message(message, channel)
-    discord_api.post_message(assignment_response.cdn_url, channel)
-    discord_api.post_message(reserves_response.cdn_url, channel)
+    try:
+        await discord_client.post_message(channel, message)
+        await discord_client.post_message(channel, assignment_response.attachments[0].url)
+        await discord_client.post_message(channel, reserves_response.attachments[0].url)
+    except Exception as e:
+        raise RuntimeError(f"Failed to send messages to Discord channel '{channel}': {e}")
 
-if __name__ == '__main__':
-    main()
+async def fetch_channel_members_function(guild_name):
+    bot_token = BOTTOKEN
+    discord_client = initialize_discord_client(guild_name, BOTTOKEN)
+
+    members = await discord_client.get_guild_members()
+
+    print("Members in the channel:")
+    for member in members:
+        print(f"Username: {member['username']}, Nickname: {member['nickname']}")
+
+from excel import extract_positions_from_excel
+import os
+import re
+from typing import Optional, List, Tuple
+
+def get_latest_siege_assignments() -> Optional[str]:
+    """
+    Scans the root directory for the most recent siege assignment Excel file based on the date in the filename.
+
+    Returns:
+        Optional[str]: The path to the most recent siege assignment Excel file, or None if not found.
+    """
+    latest_file = None
+    latest_date = None
+    for filename in os.listdir(root):
+        date_str = extract_date_from_filename(filename)
+        if date_str:
+            try:
+                year, month, day = map(int, date_str.split('-'))
+                file_date = (year, month, day)
+            except ValueError:
+                continue
+            if latest_date is None or file_date > latest_date:
+                latest_date = file_date
+                latest_file = filename
+    if latest_file:
+        return os.path.join(root, latest_file)
+    return None
+
+def print_assignments() -> None:
+    """
+    Loads the latest siege assignment Excel file, extracts positions, and prints them to the console.
+
+    Returns:
+        None
+    """
+    file_path = get_latest_siege_assignments()
+    if not file_path:
+        print("No siege assignment Excel file found.")
+        return
+    positions = extract_positions_from_excel(file_path)
+    print("Assignments:")
+    for position, member in positions:
+        print(f"Member: {member} -> {position}")

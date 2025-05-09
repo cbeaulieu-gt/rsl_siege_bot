@@ -1,5 +1,7 @@
 import xlwings as xw
 from pdf2image import convert_from_path
+from typing import List, Tuple, Optional
+from siege_planner import Position
 
 
 def compare_sheets_between_workbooks(file_path1, file_path2, sheet_name, cell_range):
@@ -103,3 +105,129 @@ def export_range_as_image(file_path, sheet_name, cell_range, output_image_path):
         # Clean up
         wb.close()
         app.quit()
+
+
+def parse_building_cell(building_cell: str) -> Tuple[str, Optional[int]]:
+    """
+    Parses the building cell to extract the building name and number.
+
+    Args:
+        building_cell (str): The cell value containing building info.
+
+    Returns:
+        Tuple[str, Optional[int]]: The building name and optional building number.
+    """
+    parts = str(building_cell).split()
+    if parts and parts[-1].isdigit():
+        building_number = int(parts[-1])
+        building_name = ' '.join(parts[:-1])
+    else:
+        building_name = str(building_cell)
+        building_number = None
+    full_name = get_full_tower_name(building_name)
+    return full_name, building_number
+
+
+def parse_group_cell(group_cell: str, current_group: Optional[str]) -> Optional[int]:
+    """
+    Parses the group cell to extract the group number.
+
+    Args:
+        group_cell (str): The cell value containing group info.
+        current_group (Optional[str]): The current group value if cell is empty.
+
+    Returns:
+        Optional[int]: The group number or None if not found.
+    """
+    group = group_cell if group_cell else current_group
+    try:
+        return int(group) if group is not None else None
+    except ValueError:
+        return None
+
+
+def extract_row_positions(row: list, building_name: str, building_number: Optional[int], group_num: Optional[int]) -> List[Tuple[Position, str]]:
+    """
+    Extracts (Position, member) pairs from a row if members are assigned.
+
+    Args:
+        row (list): The row data from Excel.
+        building_name (str): The full building name.
+        building_number (Optional[int]): The building number.
+        group_num (Optional[int]): The group number, or None if not identified.
+
+    Returns:
+        List[Tuple[Position, str]]: List of (Position, member) pairs.
+    """
+    positions = []
+    for pos_idx in range(1, 4):
+        member = row[pos_idx + 1] if len(row) > pos_idx + 1 else None
+        if member and building_name:
+            try:
+                position = Position(
+                    building=building_name,
+                    group=group_num,
+                    position=pos_idx,
+                    building_number=building_number
+                )
+                positions.append((position, str(member)))
+            except Exception as e:
+                print(f"Exception occurred while creating Position: {e}")
+                continue
+    return positions
+
+
+def extract_positions_from_excel(file_path: str) -> List[Tuple[Position, str]]:
+    """
+    Extracts a list of (Position, member) pairs from the 'Assignment' sheet of an Excel file.
+
+    Args:
+        file_path (str): Path to the Excel workbook.
+
+    Returns:
+        List[Tuple[Position, str]]: A list of (Position, member) pairs extracted from the sheet.
+    """
+    positions: List[Tuple[Position, str]] = []
+    app = xw.App(visible=False)
+    wb = app.books.open(file_path)
+    try:
+        sheet = wb.sheets['Assignments']
+        data = sheet.range('A1:E100').value  # Adjust range as needed
+        current_building_name = None
+        current_building_number = None
+        current_group = None
+        for row in data[1:]:  # Skip header row
+            building_cell = row[0]
+            group_cell = row[1]
+            if building_cell:
+                current_building_name, current_building_number = parse_building_cell(building_cell)
+            group_num = parse_group_cell(group_cell, current_group)
+            if group_num is not None:
+                current_group = group_num
+            positions.extend(
+                extract_row_positions(row, current_building_name, current_building_number, group_num)
+            )
+    finally:
+        wb.close()
+        app.quit()
+    return positions
+
+def get_full_tower_name(alias: str) -> str:
+    """
+    Maps a tower alias to its full name.
+
+    Args:
+        alias (str): The short or partial name of the tower.
+
+    Returns:
+        str: The full name of the tower.
+    """
+    alias_map = {
+        'Mana': 'Mana Shrine',
+        'Defense': 'Defense Tower',
+        'Magic': 'Magic Tower',
+    }
+    for key, full_name in alias_map.items():
+        if alias.startswith(key):
+            return full_name
+    return alias

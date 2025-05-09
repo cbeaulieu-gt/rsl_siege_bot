@@ -11,6 +11,7 @@
    - Arguments with their types and descriptions.
    - The return type and description.
 6. **Use Pytest for Tests**: When generating tests, use the `pytest` framework to ensure consistency and ease of testing.
+7. **Group Imports**: All file imports should be kept at the top of the file for readability. When importing keep to the minimum needed from the object to function.
 
 ## Suggested Python Instructions
 ### 1. Generate a Utility Function
@@ -102,4 +103,5 @@
 - Always test generated code for correctness and edge cases.
 - Use meaningful variable and function names to improve code readability.
 - Avoid hardcoding values; use constants or configuration files where appropriate.
-
+- When generating documentation focus on the functionality over describing the structure of the code. 
+- Evaluate generated code for security concerns and highlight any potential issues and possible remedies when providing suggestions.
