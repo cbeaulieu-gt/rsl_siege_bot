@@ -92,3 +92,35 @@ class DiscordAPI:
             members_info.append(member_info)
 
         return members_info
+
+    async def get_guild_members_disc(self):
+        """
+        Retrieves a list of all discord.Member objects in the guild.
+
+        Returns:
+            list[discord.Member]: List of discord.Member objects in the guild.
+        """
+        await self.wait_until_ready()
+        guild = discord.utils.get(self.bot.guilds, id=int(self.guild_id))
+        if not guild:
+            raise ValueError(f"Guild with ID {self.guild_id} not found.")
+        return list(guild.members)
+
+    async def send_message(self, member: discord.Member, message: str) -> None:
+        """
+        Sends a direct message (DM) to a specified Discord member.
+
+        Args:
+            member (discord.Member): The Discord member to send the message to.
+            message (str): The message content to send.
+
+        Raises:
+            Exception: If the message could not be sent.
+        """
+        try:
+            await member.send(message)
+        except discord.Forbidden:
+            print(f"Cannot DM {member["disc"]}: Forbidden.")
+        except Exception as e:
+            print(f"Failed to send DM to {member.name}: {e}")
+

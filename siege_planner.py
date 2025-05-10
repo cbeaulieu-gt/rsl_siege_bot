@@ -46,6 +46,34 @@ class Position:
         return (f"Position(Building='{self.building}', Group='{self.group}', Position='{self.position}', "
                 f"BuildingNumber={self.building_number})")
 
+    def __eq__(self, other) -> bool:
+        """
+        Checks equality between two Position instances.
+
+        Args:
+            other (object): The object to compare with.
+
+        Returns:
+            bool: True if all fields match, False otherwise.
+        """
+        if not isinstance(other, Position):
+            return NotImplemented
+        return (
+            self.building == other.building and
+            self.group == other.group and
+            self.position == other.position and
+            self.building_number == other.building_number
+        )
+
+    def __hash__(self) -> int:
+        """
+        Returns a hash value for the Position instance based on building, group, position, and building_number.
+
+        Returns:
+            int: The hash value of the position.
+        """
+        return hash((self.building, self.group, self.position, self.building_number))
+
 class AssignmentPlanner:
     """
     Manages member assignments to siege positions.

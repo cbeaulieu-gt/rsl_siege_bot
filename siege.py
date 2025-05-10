@@ -8,6 +8,7 @@ import click
 from discord_api.discordClient import DiscordAPI
 from excel import export_range_as_image, compare_sheets_between_workbooks
 from config import *
+from siege_planner import Position
 
 sheet = namedtuple("Sheet", ["name", "cell_range"])
 
@@ -72,7 +73,7 @@ print(f"Most recent file (upcoming siege): {most_recent_file[0]} with date {most
 print(f"Second most recent file (last siege): {second_most_recent_file[0]} with date {second_most_recent_file[1]}")
 
 confirmation = input("Do you want to proceed with these files? (yes/no): ").strip().lower()
-if confirmation != 'yes':
+if confirmation not in ['yes', 'y']:
     raise SystemExit("Operation cancelled by the user.")
 
 # Assign file paths
@@ -116,6 +117,31 @@ async def main_function(guild_name):
     except Exception as e:
         raise RuntimeError(f"Failed to send messages to Discord channel '{channel}': {e}")
 
+    # Fetch all members from the guild
+    members = await discord_client.get_guild_members()
+    nickname_to_member = {m.get('nickname') or m.get('username'): m for m in members}
+
+    # Get changed assignments
+    from excel import compare_assignment_changes
+    changed_assignments = compare_assignment_changes(old_file_path, current_file_path)
+
+    # Compute unchanged assignments
+    from excel import extract_positions_from_excel
+    old_assignments = dict(extract_positions_from_excel(old_file_path))
+    new_assignments = dict(extract_positions_from_excel(current_file_path))
+    unchanged_assignments = {}
+    for new_pos, member in new_assignments.items():
+        old_member = old_assignments.get(new_pos)
+        if old_member is not None and old_member == member:
+            if member not in unchanged_assignments:
+                unchanged_assignments[member] = [new_pos]
+            else:
+                unchanged_assignments[member].append(new_pos)
+
+    # Map Discord members by nickname to changed assignments and print
+    send_all = send_siege_assignments(discord_client, nickname_to_member, changed_assignments, unchanged_assignments)
+    await send_all()
+
 async def fetch_channel_members_function(guild_name):
     bot_token = BOTTOKEN
     discord_client = initialize_discord_client(guild_name, BOTTOKEN)
@@ -125,6 +151,72 @@ async def fetch_channel_members_function(guild_name):
     print("Members in the channel:")
     for member in members:
         print(f"Username: {member['username']}, Nickname: {member['nickname']}")
+
+def send_siege_assignments(discord_client, nickname_to_member, changed_assignments, unchanged_assignments):
+    """
+    Sends DMs to Discord members with all their siege assignment changes in a single message and prints the changes.
+
+    Args:
+        discord_client: The DiscordAPI client instance.
+        nickname_to_member (dict): Mapping of member nickname/username to Discord member info.
+        changed_assignments (dict): Mapping of member name to (old_pos, new_pos) tuples.
+        unchanged_assignments (dict): Mapping of member name to unchanged Position assignments.
+    """
+    from discord_api.discordClientUtils import format_assignment_table
+    print("Changed Siege Assignments:")
+    async def send_all():
+        # Group all changes by member
+        member_changes = {}
+        for member_name, (old_pos, new_pos) in changed_assignments.items():
+            if member_name not in member_changes:
+                member_changes[member_name] = {"old": [], "new": [], "unchanged": []}
+            member_changes[member_name]["old"].append(old_pos)
+            member_changes[member_name]["new"].append(new_pos)
+        for member_name, unchanged_pos in unchanged_assignments.items():
+            if member_name not in member_changes:
+                member_changes[member_name] = {"old": [], "new": [], "unchanged": []}
+            member_changes[member_name]["unchanged"].extend(unchanged_pos)
+        # Fetch full discord.Member objects
+        discord_members = await discord_client.get_guild_members_disc()
+        for member_name, assignments in member_changes.items():
+            discord_member = nickname_to_member.get(member_name)
+            if discord_member:
+                print(f"Discord: {discord_member['discord_name']} (Nickname: {discord_member.get('nickname', '')}) | Member: {member_name} | Changes: {list(zip(assignments['old'], assignments['new']))} | Unchanged: {assignments['unchanged']}")
+                member_obj = None
+                for m in discord_members:
+                    if (m.nick == discord_member.get('nickname')) or (m.name == discord_member.get('username')):
+                        member_obj = m
+                        break
+                if member_obj:
+                    try:
+                        await send_siege_assignment_dm(discord_client, member_obj, assignments, most_recent_file[1])
+                    except Exception as e:
+                        print(f"Failed to DM {member_name}: {e}")
+            else:
+                for old_pos, new_pos in zip(assignments['old'], assignments['new']):
+                    print(f"Member: {member_name} | Old: {old_pos} -> New: {new_pos} (No Discord match)")
+                for unchanged_pos in assignments['unchanged']:
+                    print(f"Member: {member_name} | Unchanged: {unchanged_pos} (No Discord match)")
+    return send_all
+
+def send_siege_assignment_dm(discord_client, member_obj, assignments, siege_date):
+    """
+    Sends a DM to a Discord member with their siege assignment changes, including unchanged, old, and new assignments, and siege date.
+
+    Args:
+        discord_client: The DiscordAPI client instance.
+        member_obj: The discord.Member object to DM.
+        assignments (dict): Dict with 'old', 'new', and 'unchanged' assignment lists.
+        siege_date (str): The date of the siege (YYYY-MM-DD).
+    """
+    from discord_api.discordClientUtils import format_assignment_table
+    disclaimer = (
+        ":warning: **This bot is a work in progress. Please verify assignments manually if needed.** :warning:\n"
+    )
+    title = f"[1MOM] Masters of Magicka Siege Assignment ({siege_date})"
+    table = format_assignment_table(assignments['old'], assignments['new'], assignments['unchanged'])
+    dm_message = f"{disclaimer}\n\n**{title}**\n\n{table}"
+    return discord_client.send_message(member_obj, dm_message)
 
 from excel import extract_positions_from_excel
 import os
@@ -170,3 +262,4 @@ def print_assignments() -> None:
     print("Assignments:")
     for position, member in positions:
         print(f"Member: {member} -> {position}")
+

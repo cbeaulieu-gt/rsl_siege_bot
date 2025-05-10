@@ -231,3 +231,32 @@ def get_full_tower_name(alias: str) -> str:
         if alias.startswith(key):
             return full_name
     return alias
+
+def compare_assignment_changes(old_file: str, new_file: str) -> dict[str, tuple[Optional[Position], Optional[Position]]]:
+    """
+    Compares assignments between two Excel files and returns a dictionary of members whose positions have changed, including added or removed assignments.
+
+    Args:
+        old_file (str): Path to the old Excel file.
+        new_file (str): Path to the new Excel file.
+
+    Returns:
+        dict[str, tuple[Optional[Position], Optional[Position]]]: A dictionary where the key is the member name and the value is a tuple of (old_position, new_position) for changed, added, or removed members.
+    """
+    old_assignments = extract_positions_from_excel(old_file)
+    new_assignments = extract_positions_from_excel(new_file)
+
+    old_map = {member: pos for pos, member in old_assignments}
+    new_map = {member: pos for pos, member in new_assignments}
+
+    changed = {}
+    # Members who have a new assignment or changed assignment
+    for member, new_pos in new_map.items():
+        old_pos = old_map.get(member)
+        if old_pos is None or old_pos != new_pos:
+            changed[member] = (old_pos, new_pos)
+    # Members who were removed (no new assignment)
+    for member, old_pos in old_map.items():
+        if member not in new_map:
+            changed[member] = (old_pos, None)
+    return changed
