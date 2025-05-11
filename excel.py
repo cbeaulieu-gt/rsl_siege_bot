@@ -232,31 +232,38 @@ def get_full_tower_name(alias: str) -> str:
             return full_name
     return alias
 
-def compare_assignment_changes(old_file: str, new_file: str) -> dict[str, tuple[Optional[Position], Optional[Position]]]:
+def compare_assignment_changes(old_file: str, new_file: str) -> dict[str, dict[str, list[Optional[Position]]]]:
     """
-    Compares assignments between two Excel files and returns a dictionary of members whose positions have changed, including added or removed assignments.
+    Compares assignments between two Excel files and returns a dictionary of members with lists of old and new positions (including added or removed assignments).
 
     Args:
         old_file (str): Path to the old Excel file.
         new_file (str): Path to the new Excel file.
 
     Returns:
-        dict[str, tuple[Optional[Position], Optional[Position]]]: A dictionary where the key is the member name and the value is a tuple of (old_position, new_position) for changed, added, or removed members.
+        dict[str, dict[str, list[Optional[Position]]]]: A dictionary where the key is the member name and the value is a dict with 'old' and 'new' lists of positions for changed, added, or removed members.
     """
     old_assignments = extract_positions_from_excel(old_file)
     new_assignments = extract_positions_from_excel(new_file)
 
-    old_map = {member: pos for pos, member in old_assignments}
-    new_map = {member: pos for pos, member in new_assignments}
+    # Build mapping: member -> list of positions
+    old_map: dict[str, list[Position]] = {}
+    for pos, member in old_assignments:
+        old_map.setdefault(member, []).append(pos)
+    new_map: dict[str, list[Position]] = {}
+    for pos, member in new_assignments:
+        new_map.setdefault(member, []).append(pos)
 
-    changed = {}
-    # Members who have a new assignment or changed assignment
-    for member, new_pos in new_map.items():
-        old_pos = old_map.get(member)
-        if old_pos is None or old_pos != new_pos:
-            changed[member] = (old_pos, new_pos)
-    # Members who were removed (no new assignment)
-    for member, old_pos in old_map.items():
-        if member not in new_map:
-            changed[member] = (old_pos, None)
-    return changed
+    member_changes: dict[str, dict[str, list[Optional[Position]]]] = {}
+    all_members = set(old_map.keys()) | set(new_map.keys())
+    for member in all_members:
+        old_positions = set(old_map.get(member, []))
+        new_positions = set(new_map.get(member, []))
+        removed = list(old_positions - new_positions)
+        added = list(new_positions - old_positions)
+        if removed or added:
+            member_changes[member] = {
+                'old': removed,
+                'new': added
+            }
+    return member_changes

@@ -10,9 +10,11 @@ def cli():
 
 @cli.command(name='run_siege')
 @click.option('--guild', default='Personal', help='The guild name to use for running commands.')
-def run_siege(guild):
+@click.option('--send-dm', is_flag=True, default=False, help='Send DMs to members about assignment changes.')
+@click.option('--post-message', is_flag=True, default=False, help='Post assignment images and messages to Discord channels.')
+def run_siege(guild, send_dm, post_message):
     """Main entry point for the script."""
-    asyncio.run(main_function(guild))
+    asyncio.run(main_function(guild, send_dm, post_message))
 
 @cli.command(name='fetch_guild_members')
 @click.option('--guild', required=True, help='The guild name to use for fetching channel members.')

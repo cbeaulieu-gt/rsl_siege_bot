@@ -3,12 +3,16 @@ import os.path
 from collections import namedtuple
 import configparser
 import re
+import string
 
 import click
 from discord_api.discordClient import DiscordAPI
+from discord_api.discordClientUtils import find_discord_member
 from excel import export_range_as_image, compare_sheets_between_workbooks
 from config import *
 from siege_planner import Position
+from siege_utils import build_changeset
+
 
 sheet = namedtuple("Sheet", ["name", "cell_range"])
 
@@ -93,33 +97,44 @@ async def initialize_discord_client(guild_name, bot_token):
 
     return discord_client
 
-async def main_function(guild_name):
+async def main_function(guild_name: str, send_dm: bool, post_message: bool) -> None:
+    """
+    Main function to process siege assignments, post images/messages, and optionally send DMs.
+
+    Args:
+        guild_name (str): The name of the guild.
+        send_dm (bool): Whether to send DMs to members about assignment changes.
+        post_message (bool): Whether to post assignment images and messages to Discord channels.
+    Returns:
+        None
+    """
     discord_client = await initialize_discord_client(guild_name, BOTTOKEN)
 
-    assignment_sheet_image = export_siege_sheet(root, assignment_sheet)
-    reserves_sheet_image = export_siege_sheet(root, reserves_sheet)
+    if post_message:
+        assignment_sheet_image = export_siege_sheet(root, assignment_sheet)
+        reserves_sheet_image = export_siege_sheet(root, reserves_sheet)
 
-    channel = "clan-siege-assignment-images"
-    try:
-        assignment_response = await discord_client.post_image(channel, assignment_sheet_image)
-        reserves_response = await discord_client.post_image(channel, reserves_sheet_image)
-    except Exception as e:
-        raise RuntimeError(f"Failed to post images to Discord: {e}")
+        channel = "clan-siege-assignment-images"
+        try:
+            assignment_response = await discord_client.post_image(channel, assignment_sheet_image)
+            reserves_response = await discord_client.post_image(channel, reserves_sheet_image)
+        except Exception as e:
+            raise RuntimeError(f"Failed to post images to Discord: {e}")
 
-    channel = "clan-siege-assignments"
-    message = "--------------------------------------------------------------" \
-                f"\n**Siege Assignments - {most_recent_file[1]}**\n" \
-                "--------------------------------------------------------------"
-    try:
-        await discord_client.post_message(channel, message)
-        await discord_client.post_message(channel, assignment_response.attachments[0].url)
-        await discord_client.post_message(channel, reserves_response.attachments[0].url)
-    except Exception as e:
-        raise RuntimeError(f"Failed to send messages to Discord channel '{channel}': {e}")
+        channel = "clan-siege-assignments"
+        message = "--------------------------------------------------------------" \
+                  f"\n**Siege Assignments - {most_recent_file[1]}**\n" \
+                  "--------------------------------------------------------------"
+        try:
+            await discord_client.post_message(channel, message)
+            await discord_client.post_message(channel, assignment_response.attachments[0].url)
+            await discord_client.post_message(channel, reserves_response.attachments[0].url)
+        except Exception as e:
+            raise RuntimeError(f"Failed to send messages to Discord channel '{channel}': {e}")
 
     # Fetch all members from the guild
     members = await discord_client.get_guild_members()
-    nickname_to_member = {m.get('nickname') or m.get('username'): m for m in members}
+    nickname_to_member = {m.get('nickname') or m.get('discord_name'): m for m in members}
 
     # Get changed assignments
     from excel import compare_assignment_changes
@@ -129,17 +144,10 @@ async def main_function(guild_name):
     from excel import extract_positions_from_excel
     old_assignments = dict(extract_positions_from_excel(old_file_path))
     new_assignments = dict(extract_positions_from_excel(current_file_path))
-    unchanged_assignments = {}
-    for new_pos, member in new_assignments.items():
-        old_member = old_assignments.get(new_pos)
-        if old_member is not None and old_member == member:
-            if member not in unchanged_assignments:
-                unchanged_assignments[member] = [new_pos]
-            else:
-                unchanged_assignments[member].append(new_pos)
+    unchanged_assignments = get_unchanged_positions(old_assignments, new_assignments)
 
     # Map Discord members by nickname to changed assignments and print
-    send_all = send_siege_assignments(discord_client, nickname_to_member, changed_assignments, unchanged_assignments)
+    send_all = send_siege_assignments(discord_client, nickname_to_member, changed_assignments, unchanged_assignments, send_dm)
     await send_all()
 
 async def fetch_channel_members_function(guild_name):
@@ -152,7 +160,7 @@ async def fetch_channel_members_function(guild_name):
     for member in members:
         print(f"Username: {member['username']}, Nickname: {member['nickname']}")
 
-def send_siege_assignments(discord_client, nickname_to_member, changed_assignments, unchanged_assignments):
+def send_siege_assignments(discord_client, nickname_to_member, changed_assignments, unchanged_assignments, send_dm: bool = False):
     """
     Sends DMs to Discord members with all their siege assignment changes in a single message and prints the changes.
 
@@ -166,35 +174,28 @@ def send_siege_assignments(discord_client, nickname_to_member, changed_assignmen
     print("Changed Siege Assignments:")
     async def send_all():
         # Group all changes by member
-        member_changes = {}
-        for member_name, (old_pos, new_pos) in changed_assignments.items():
-            if member_name not in member_changes:
-                member_changes[member_name] = {"old": [], "new": [], "unchanged": []}
-            member_changes[member_name]["old"].append(old_pos)
-            member_changes[member_name]["new"].append(new_pos)
-        for member_name, unchanged_pos in unchanged_assignments.items():
-            if member_name not in member_changes:
-                member_changes[member_name] = {"old": [], "new": [], "unchanged": []}
-            member_changes[member_name]["unchanged"].extend(unchanged_pos)
+        member_changes = build_changeset(changed_assignments, unchanged_assignments)
+
         # Fetch full discord.Member objects
         discord_members = await discord_client.get_guild_members_disc()
         for member_name, assignments in member_changes.items():
-            discord_member = nickname_to_member.get(member_name)
-            if discord_member:
-                print(f"Discord: {discord_member['discord_name']} (Nickname: {discord_member.get('nickname', '')}) | Member: {member_name} | Changes: {list(zip(assignments['old'], assignments['new']))} | Unchanged: {assignments['unchanged']}")
-                member_obj = None
-                for m in discord_members:
-                    if (m.nick == discord_member.get('nickname')) or (m.name == discord_member.get('username')):
-                        member_obj = m
-                        break
-                if member_obj:
+            member_obj = find_discord_member(discord_members, member_name)
+            if member_obj:
+                print(f"Discord: {getattr(member_obj, 'name', '')} (Nickname: {getattr(member_obj, 'nick', '')}) | Member: {member_name} | Changes: Old: {assignments['old']} | New: {assignments['new']} | Unchanged: {assignments['unchanged']}")
+                if send_dm:
                     try:
+                        # Wait for 1 second to avoid hitting Discord's rate limit
+                        await asyncio.sleep(1)
                         await send_siege_assignment_dm(discord_client, member_obj, assignments, most_recent_file[1])
                     except Exception as e:
                         print(f"Failed to DM {member_name}: {e}")
             else:
-                for old_pos, new_pos in zip(assignments['old'], assignments['new']):
-                    print(f"Member: {member_name} | Old: {old_pos} -> New: {new_pos} (No Discord match)")
+                if assignments['old']:
+                    for old_pos in assignments['old']:
+                        print(f"Member: {member_name} | Removed: {old_pos} (No Discord match)")
+                if assignments['new']:
+                    for new_pos in assignments['new']:
+                        print(f"Member: {member_name} | Added: {new_pos} (No Discord match)")
                 for unchanged_pos in assignments['unchanged']:
                     print(f"Member: {member_name} | Unchanged: {unchanged_pos} (No Discord match)")
     return send_all
@@ -217,6 +218,27 @@ def send_siege_assignment_dm(discord_client, member_obj, assignments, siege_date
     table = format_assignment_table(assignments['old'], assignments['new'], assignments['unchanged'])
     dm_message = f"{disclaimer}\n\n**{title}**\n\n{table}"
     return discord_client.send_message(member_obj, dm_message)
+
+def get_unchanged_positions(old_assignments: dict, new_assignments: dict) -> dict:
+    """
+    Returns a dictionary of members whose assignments have not changed between two assignment mappings.
+
+    Args:
+        old_assignments (dict): Mapping of Position to member from the old assignments.
+        new_assignments (dict): Mapping of Position to member from the new assignments.
+
+    Returns:
+        dict: Mapping of member name to a list of unchanged Position objects.
+    """
+    unchanged_assignments = {}
+    for new_pos, member in new_assignments.items():
+        old_member = old_assignments.get(new_pos)
+        if old_member is not None and old_member == member:
+            if member not in unchanged_assignments:
+                unchanged_assignments[member] = [new_pos]
+            else:
+                unchanged_assignments[member].append(new_pos)
+    return unchanged_assignments
 
 from excel import extract_positions_from_excel
 import os
