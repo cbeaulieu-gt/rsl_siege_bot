@@ -1,3 +1,7 @@
+import os
+
+from excel import get_recent_siege_files
+
 class Position:
     """
     Represents a position in the siege.
@@ -78,11 +82,17 @@ class AssignmentPlanner:
     """
     Manages member assignments to siege positions.
     """
-    def __init__(self) -> None:
+    def __init__(self, root: str) -> None:
         """
         Initializes the AssignmentPlanner with an empty assignment mapping.
+
+        Args:
+            root (str): Root directory path containing siege files
         """
         self.assignments: dict[str, Position] = {}
+        self.root = root
+        self.most_recent_file = None
+        self.second_most_recent_file = None
 
     def set_assignment(self, member: str, position: Position) -> None:
         """
@@ -139,3 +149,62 @@ class AssignmentPlanner:
                 return False
             seen.add(key)
         return True
+    
+    def load_recent_siege_files(self, skip_confirmation=False):
+        """
+        Load and optionally confirm the two most recent siege files with user input.
+
+        Args:
+            skip_confirmation (bool): If True, skips user confirmation prompt
+
+        Returns:
+            tuple: Tuple containing most recent and second most recent file tuples (filename, date)
+
+        Raises:
+            SystemExit: If user does not confirm file selection when confirmation is required
+        """
+        
+        most_recent_file, second_most_recent_file = get_recent_siege_files(self.root)
+
+        # Always print the files found
+        print(f"Most recent file (upcoming siege): {most_recent_file[0]} with date {most_recent_file[1]}")
+        print(f"Second most recent file (last siege): {second_most_recent_file[0]} with date {second_most_recent_file[1]}")
+
+        if not skip_confirmation:
+            confirmation = input("Do you want to proceed with these files? (yes/no): ").strip().lower()
+            if confirmation not in ['yes', 'y']:
+                raise SystemExit("Operation cancelled by the user.")
+            
+        self.most_recent_file = most_recent_file
+        self.second_most_recent_file = second_most_recent_file
+        return most_recent_file, second_most_recent_file
+
+    @property
+    def current_file_path(self) -> str:
+        """
+        Gets the full path to the current siege file.
+
+        Returns:
+            str: Full path to the current siege file
+        
+        Raises:
+            ValueError: If no files have been loaded yet
+        """
+        if not self.most_recent_file:
+            raise ValueError("No siege files have been loaded. Call load_recent_siege_files first.")
+        return os.path.join(self.root, self.most_recent_file[0])
+
+    @property 
+    def old_file_path(self) -> str:
+        """
+        Gets the full path to the previous siege file.
+
+        Returns:
+            str: Full path to the previous siege file
+        
+        Raises:
+            ValueError: If no files have been loaded yet
+        """
+        if not self.second_most_recent_file:
+            raise ValueError("No siege files have been loaded. Call load_recent_siege_files first.")
+        return os.path.join(self.root, self.second_most_recent_file[0])

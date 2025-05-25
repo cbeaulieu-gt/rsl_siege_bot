@@ -33,6 +33,7 @@ def format_assignment_table(old_assignments: list, new_assignments: list, unchan
     sections = [section for section in [unchanged_section, old_section, new_section] if section]
     return "\n\n".join(sections)
 
+import configparser
 import json
 import os
 import string
@@ -138,3 +139,14 @@ def find_discord_member(discord_members: list, member_name: str, json_path: str 
     if member_name not in member_map:
         _update_member_map(member_map, member_name, "", json_path)
     return None
+
+
+def get_guild_id(guild_name):
+    config = configparser.ConfigParser()
+    config.read('guild_config.ini')
+
+    if guild_name in config['Guilds']:
+        return config['Guilds'][guild_name]
+    else:
+        raise ValueError(f"Guild name '{guild_name}' not found in configuration.")
+

@@ -20,3 +20,17 @@ def build_changeset(changed_assignments: dict, unchanged_assignments: dict) -> d
             member_changes[member_name] = {"old": [], "new": [], "unchanged": []}
         member_changes[member_name]["unchanged"].extend(unchanged_pos)
     return member_changes
+
+def format_siege_date(date_str):
+    """
+    Convert a date string from MM/DD/YYYY to YYYY-MM-DD format.
+    """
+    month, day, year = date_str.split('/')
+    return f"{month}_{day}_{year}"
+
+def get_siege_file_name(date: str):
+    """
+    Generate the file name for the siege based on the date.
+    """
+    formatted_date = format_siege_date(date)
+    return f"clan_siege_{formatted_date}.xlsm"

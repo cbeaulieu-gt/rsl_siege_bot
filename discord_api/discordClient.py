@@ -2,6 +2,8 @@ import discord
 from discord.ext import commands
 import asyncio
 
+from discord_api.discordClientUtils import get_guild_id
+
 class DiscordAPI:
     def __init__(self, guild_id, bot_token):
         self.guild_id = guild_id
@@ -124,3 +126,13 @@ class DiscordAPI:
         except Exception as e:
             print(f"Failed to send DM to {member.name}: {e}")
 
+
+async def initialize_discord_client(guild_name, bot_token):
+    guild_id = get_guild_id(guild_name)
+    print(f"Using GUILDID: {guild_id}")
+    discord_client = DiscordAPI(guild_id, bot_token=bot_token)
+
+    await discord_client.start_bot()  # Start the bot in the background
+    await discord_client.wait_until_ready()
+
+    return discord_client

@@ -1,101 +1,25 @@
 import asyncio
+import os
 import os.path
-from collections import namedtuple
-import configparser
-import re
-import string
+from typing import Optional
 
-import click
-from discord_api.discordClient import DiscordAPI
-from discord_api.discordClientUtils import find_discord_member
-from excel import export_range_as_image, compare_sheets_between_workbooks
+from discord_api.discordClient import DiscordAPI, initialize_discord_client
+from discord_api.discordClientUtils import find_discord_member, format_assignment_table
+
 from config import *
-from siege_planner import Position
+from excel import (
+    SiegeExcelSheets,
+    compare_assignment_changes,
+    export_siege_sheet,
+    extract_positions_from_excel,
+    extract_date_from_filename,
+)
+from siege_planner import AssignmentPlanner, Position
 from siege_utils import build_changeset
 
 
-sheet = namedtuple("Sheet", ["name", "cell_range"])
-
-def format_siege_date(date_str):
-    """
-    Convert a date string from MM/DD/YYYY to YYYY-MM-DD format.
-    """
-    month, day, year = date_str.split('/')
-    return f"{month}_{day}_{year}"
-
-def get_siege_file_name(date: str):
-    """
-    Generate the file name for the siege based on the date.
-    """
-    formatted_date = format_siege_date(date)
-    return f"clan_siege_{formatted_date}.xlsm"
-
-def export_siege_sheet(path: str, xl_sheet: sheet) -> str:
-    output_file = os.path.join(path, f"{str.lower(xl_sheet.name)}.png")  # Save as PDF (images are not natively supported in xlwings)
-    assignments_image_path = export_range_as_image(current_file_path, xl_sheet.name, xl_sheet.cell_range, output_file)
-    return assignments_image_path
-
-config = configparser.ConfigParser()
-config.read('guild_config.ini')
-
-def get_guild_id(guild_name):
-    if guild_name in config['Guilds']:
-        return config['Guilds'][guild_name]
-    else:
-        raise ValueError(f"Guild name '{guild_name}' not found in configuration.")
-
 root = "E:\\My Files\\Games\\Raid Shadow Legends\\siege\\"
 
-def extract_date_from_filename(filename):
-    match = re.search(r'clan_siege_(\d{2})_(\d{2})_(\d{4})', filename)
-    if match:
-        month, day, year = match.groups()
-        return f"{year}-{month}-{day}"
-    return None
-
-def get_recent_siege_files(root):
-    siege_files = []
-    for file in os.listdir(root):
-        if file.endswith('.xlsm'):
-            date_str = extract_date_from_filename(file)
-            if date_str:
-                siege_files.append((file, date_str))
-
-    # Sort files by date in descending order
-    siege_files.sort(key=lambda x: x[1], reverse=True)
-
-    if len(siege_files) < 2:
-        raise ValueError("Not enough siege files found in the directory.")
-
-    return siege_files[0], siege_files[1]  # Most recent and second most recent
-
-# Scan the root folder for siege files
-most_recent_file, second_most_recent_file = get_recent_siege_files(root)
-
-# Confirm with the user
-print(f"Most recent file (upcoming siege): {most_recent_file[0]} with date {most_recent_file[1]}")
-print(f"Second most recent file (last siege): {second_most_recent_file[0]} with date {second_most_recent_file[1]}")
-
-confirmation = input("Do you want to proceed with these files? (yes/no): ").strip().lower()
-if confirmation not in ['yes', 'y']:
-    raise SystemExit("Operation cancelled by the user.")
-
-# Assign file paths
-current_file_path = os.path.join(root, most_recent_file[0])
-old_file_path = os.path.join(root, second_most_recent_file[0])
-
-assignment_sheet = sheet("Assignments", "A1:E42")
-reserves_sheet = sheet("Reserves", "A1:D28")
-
-async def initialize_discord_client(guild_name, bot_token):
-    guild_id = get_guild_id(guild_name)
-    print(f"Using GUILDID: {guild_id}")
-    discord_client = DiscordAPI(guild_id, bot_token=bot_token)
-
-    await discord_client.start_bot()  # Start the bot in the background
-    await discord_client.wait_until_ready()
-
-    return discord_client
 
 async def main_function(guild_name: str, send_dm: bool, post_message: bool) -> None:
     """
@@ -110,9 +34,13 @@ async def main_function(guild_name: str, send_dm: bool, post_message: bool) -> N
     """
     discord_client = await initialize_discord_client(guild_name, BOTTOKEN)
 
+    # Load the most recent siege files
+    siege_planner = AssignmentPlanner(root)
+    most_recent_file, _ = siege_planner.load_recent_siege_files()
+
     if post_message:
-        assignment_sheet_image = export_siege_sheet(root, assignment_sheet)
-        reserves_sheet_image = export_siege_sheet(root, reserves_sheet)
+        assignment_sheet_image = export_siege_sheet(root, SiegeExcelSheets.assignment_sheet, most_recent_file, root)
+        reserves_sheet_image = export_siege_sheet(root, SiegeExcelSheets.reserves_sheet, most_recent_file, root)
 
         channel = "clan-siege-assignment-images"
         try:
@@ -137,13 +65,11 @@ async def main_function(guild_name: str, send_dm: bool, post_message: bool) -> N
     nickname_to_member = {m.get('nickname') or m.get('discord_name'): m for m in members}
 
     # Get changed assignments
-    from excel import compare_assignment_changes
-    changed_assignments = compare_assignment_changes(old_file_path, current_file_path)
+    changed_assignments = compare_assignment_changes(siege_planner.old_file_path, siege_planner.current_file_path)
 
     # Compute unchanged assignments
-    from excel import extract_positions_from_excel
-    old_assignments = dict(extract_positions_from_excel(old_file_path))
-    new_assignments = dict(extract_positions_from_excel(current_file_path))
+    old_assignments = dict(extract_positions_from_excel(siege_planner.old_file_path))
+    new_assignments = dict(extract_positions_from_excel(siege_planner.current_file_path))
     unchanged_assignments = get_unchanged_positions(old_assignments, new_assignments)
 
     # Map Discord members by nickname to changed assignments and print
@@ -160,7 +86,7 @@ async def fetch_channel_members_function(guild_name):
     for member in members:
         print(f"Username: {member['username']}, Nickname: {member['nickname']}")
 
-def send_siege_assignments(discord_client, nickname_to_member, changed_assignments, unchanged_assignments, send_dm: bool = False):
+def send_siege_assignments(discord_client, changed_assignments, unchanged_assignments, send_dm: bool = False):
     """
     Sends DMs to Discord members with all their siege assignment changes in a single message and prints the changes.
 
@@ -170,7 +96,6 @@ def send_siege_assignments(discord_client, nickname_to_member, changed_assignmen
         changed_assignments (dict): Mapping of member name to (old_pos, new_pos) tuples.
         unchanged_assignments (dict): Mapping of member name to unchanged Position assignments.
     """
-    from discord_api.discordClientUtils import format_assignment_table
     print("Changed Siege Assignments:")
     async def send_all():
         # Group all changes by member
@@ -210,7 +135,6 @@ def send_siege_assignment_dm(discord_client, member_obj, assignments, siege_date
         assignments (dict): Dict with 'old', 'new', and 'unchanged' assignment lists.
         siege_date (str): The date of the siege (YYYY-MM-DD).
     """
-    from discord_api.discordClientUtils import format_assignment_table
     disclaimer = (
         ":warning: **This bot is a work in progress. Please verify assignments manually if needed.** :warning:\n"
     )
@@ -239,11 +163,6 @@ def get_unchanged_positions(old_assignments: dict, new_assignments: dict) -> dic
             else:
                 unchanged_assignments[member].append(new_pos)
     return unchanged_assignments
-
-from excel import extract_positions_from_excel
-import os
-import re
-from typing import Optional, List, Tuple
 
 def get_latest_siege_assignments() -> Optional[str]:
     """

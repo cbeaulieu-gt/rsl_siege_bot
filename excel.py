@@ -1,7 +1,14 @@
+import os
+import re
 import xlwings as xw
 from pdf2image import convert_from_path
 from typing import List, Tuple, Optional
 from siege_planner import Position
+from collections import namedtuple
+
+sheet = namedtuple("Sheet", ["name", "cell_range"])
+assignment_sheet = sheet("Assignments", "A1:E42")
+reserves_sheet = sheet("Reserves", "A1:D28")
 
 
 def compare_sheets_between_workbooks(file_path1, file_path2, sheet_name, cell_range):
@@ -267,3 +274,26 @@ def compare_assignment_changes(old_file: str, new_file: str) -> dict[str, dict[s
                 'new': added
             }
     return member_changes
+
+def extract_date_from_filename(filename):
+    match = re.search(r'clan_siege_(\d{2})_(\d{2})_(\d{4})', filename)
+    if match:
+        month, day, year = match.groups()
+        return f"{year}-{month}-{day}"
+    return None
+
+def get_recent_siege_files(root):
+    siege_files = []
+    for file in os.listdir(root):
+        if file.endswith('.xlsm'):
+            date_str = extract_date_from_filename(file)
+            if date_str:
+                siege_files.append((file, date_str))
+
+    # Sort files by date in descending order
+    siege_files.sort(key=lambda x: x[1], reverse=True)
+
+    if len(siege_files) < 2:
+        raise ValueError("Not enough siege files found in the directory.")
+
+    return siege_files[0], siege_files[1]  # Most recent and second most recent
