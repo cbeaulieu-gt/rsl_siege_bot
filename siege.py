@@ -9,13 +9,13 @@ from discord_api.discordClientUtils import find_discord_member, format_assignmen
 from config import *
 from excel import (
     SiegeExcelSheets,
-    compare_assignment_changes,
     export_siege_sheet,
+    compare_assignment_changes,
     extract_positions_from_excel,
     extract_date_from_filename,
 )
 from siege_planner import AssignmentPlanner, Position
-from siege_utils import build_changeset
+from siege_utils import build_changeset, load_recent_siege_files
 
 
 root = "E:\\My Files\\Games\\Raid Shadow Legends\\siege\\"
@@ -36,12 +36,12 @@ async def main_function(guild_name: str, send_dm: bool, post_message: bool) -> N
 
     # Load the most recent siege files
     siege_planner = AssignmentPlanner(root)
-    most_recent_file, _ = siege_planner.load_recent_siege_files()
+    siege_planner.most_recent_file, siege_planner.second_most_recent_file = load_recent_siege_files(root)
+
+    assignment_sheet_image = export_siege_sheet(root, SiegeExcelSheets.assignment_sheet, siege_planner.most_recent_file.file_name, root)
+    reserves_sheet_image = export_siege_sheet(root, SiegeExcelSheets.reserves_sheet, siege_planner.most_recent_file.file_name, root)
 
     if post_message:
-        assignment_sheet_image = export_siege_sheet(root, SiegeExcelSheets.assignment_sheet, most_recent_file, root)
-        reserves_sheet_image = export_siege_sheet(root, SiegeExcelSheets.reserves_sheet, most_recent_file, root)
-
         channel = "clan-siege-assignment-images"
         try:
             assignment_response = await discord_client.post_image(channel, assignment_sheet_image)
@@ -51,7 +51,7 @@ async def main_function(guild_name: str, send_dm: bool, post_message: bool) -> N
 
         channel = "clan-siege-assignments"
         message = "--------------------------------------------------------------" \
-                  f"\n**Siege Assignments - {most_recent_file[1]}**\n" \
+                  f"\n**Siege Assignments - {siege_planner.most_recent_file.date}**\n" \
                   "--------------------------------------------------------------"
         try:
             await discord_client.post_message(channel, message)
@@ -73,7 +73,7 @@ async def main_function(guild_name: str, send_dm: bool, post_message: bool) -> N
     unchanged_assignments = get_unchanged_positions(old_assignments, new_assignments)
 
     # Map Discord members by nickname to changed assignments and print
-    send_all = send_siege_assignments(discord_client, nickname_to_member, changed_assignments, unchanged_assignments, send_dm)
+    send_all = send_siege_assignments(discord_client, changed_assignments, unchanged_assignments, siege_planner.most_recent_file.date, send_dm)
     await send_all()
 
 async def fetch_channel_members_function(guild_name):
@@ -86,7 +86,7 @@ async def fetch_channel_members_function(guild_name):
     for member in members:
         print(f"Username: {member['username']}, Nickname: {member['nickname']}")
 
-def send_siege_assignments(discord_client, changed_assignments, unchanged_assignments, send_dm: bool = False):
+def send_siege_assignments(discord_client, changed_assignments, unchanged_assignments, siege_date, send_dm: bool = False):
     """
     Sends DMs to Discord members with all their siege assignment changes in a single message and prints the changes.
 
@@ -111,7 +111,7 @@ def send_siege_assignments(discord_client, changed_assignments, unchanged_assign
                     try:
                         # Wait for 1 second to avoid hitting Discord's rate limit
                         await asyncio.sleep(1)
-                        await send_siege_assignment_dm(discord_client, member_obj, assignments, most_recent_file[1])
+                        await send_siege_assignment_dm(discord_client, member_obj, assignments, siege_date)
                     except Exception as e:
                         print(f"Failed to DM {member_name}: {e}")
             else:

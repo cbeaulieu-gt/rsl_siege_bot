@@ -1,6 +1,5 @@
 import os
 
-from excel import get_recent_siege_files
 
 class Position:
     """
@@ -149,35 +148,6 @@ class AssignmentPlanner:
                 return False
             seen.add(key)
         return True
-    
-    def load_recent_siege_files(self, skip_confirmation=False):
-        """
-        Load and optionally confirm the two most recent siege files with user input.
-
-        Args:
-            skip_confirmation (bool): If True, skips user confirmation prompt
-
-        Returns:
-            tuple: Tuple containing most recent and second most recent file tuples (filename, date)
-
-        Raises:
-            SystemExit: If user does not confirm file selection when confirmation is required
-        """
-        
-        most_recent_file, second_most_recent_file = get_recent_siege_files(self.root)
-
-        # Always print the files found
-        print(f"Most recent file (upcoming siege): {most_recent_file[0]} with date {most_recent_file[1]}")
-        print(f"Second most recent file (last siege): {second_most_recent_file[0]} with date {second_most_recent_file[1]}")
-
-        if not skip_confirmation:
-            confirmation = input("Do you want to proceed with these files? (yes/no): ").strip().lower()
-            if confirmation not in ['yes', 'y']:
-                raise SystemExit("Operation cancelled by the user.")
-            
-        self.most_recent_file = most_recent_file
-        self.second_most_recent_file = second_most_recent_file
-        return most_recent_file, second_most_recent_file
 
     @property
     def current_file_path(self) -> str:

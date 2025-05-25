@@ -6,9 +6,11 @@ from typing import List, Tuple, Optional
 from siege_planner import Position
 from collections import namedtuple
 
+siege_file = namedtuple("SiegeFile", ["file_name", "date"])
 sheet = namedtuple("Sheet", ["name", "cell_range"])
-assignment_sheet = sheet("Assignments", "A1:E42")
-reserves_sheet = sheet("Reserves", "A1:D28")
+class SiegeExcelSheets:
+    assignment_sheet = sheet("Assignments", "A1:E42")
+    reserves_sheet = sheet("Reserves", "A1:D28")
 
 
 def compare_sheets_between_workbooks(file_path1, file_path2, sheet_name, cell_range):
@@ -113,6 +115,24 @@ def export_range_as_image(file_path, sheet_name, cell_range, output_image_path):
         wb.close()
         app.quit()
 
+
+def export_siege_sheet(root: str, sheet: SiegeExcelSheets, file_name: str, output_dir: str) -> str:
+    """
+    Exports a specific sheet from the siege Excel file to an image.
+
+    Args:
+        root (str): Root directory path containing siege files.
+        sheet (SiegeExcelSheets): The sheet to export.
+        file_name (str): The name of the Excel file.
+        output_dir (str): Directory to save the exported image.
+
+    Returns:
+        str: Path to the exported image.
+    """
+    file_path = os.path.join(root, file_name)
+    output_image_path = os.path.join(output_dir, f"{sheet.name}.png")
+    export_range_as_image(file_path, sheet.name, sheet.cell_range, output_image_path)
+    return output_image_path
 
 def parse_building_cell(building_cell: str) -> Tuple[str, Optional[int]]:
     """
@@ -282,18 +302,18 @@ def extract_date_from_filename(filename):
         return f"{year}-{month}-{day}"
     return None
 
-def get_recent_siege_files(root):
+def get_recent_siege_files(root)-> tuple[siege_file]:
     siege_files = []
     for file in os.listdir(root):
         if file.endswith('.xlsm'):
             date_str = extract_date_from_filename(file)
             if date_str:
-                siege_files.append((file, date_str))
+                siege_files.append(siege_file(file, date_str))
 
     # Sort files by date in descending order
-    siege_files.sort(key=lambda x: x[1], reverse=True)
+    siege_files.sort(key=lambda x: x.date, reverse=True)
 
     if len(siege_files) < 2:
         raise ValueError("Not enough siege files found in the directory.")
 
-    return siege_files[0], siege_files[1]  # Most recent and second most recent
+    return siege_files[0], siege_files[1]
