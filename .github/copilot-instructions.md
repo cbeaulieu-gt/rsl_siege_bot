@@ -1,107 +1,87 @@
+# GitHub Copilot Instructions for Python Code Generation
 
-# Copilot Instructions for Siege Project
+These instructions guide GitHub Copilot to generate Python code that follows best practices for readability, maintainability, and robustness. All code must be production-ready, consistent in style, and accompanied by appropriate documentation and tests.
 
-## General Guidelines
-1. **Follow PEP8 Conventions**: Ensure all generated code adheres to PEP8 standards for readability and maintainability.
-2. **Use Built-in Libraries**: Prefer Python's built-in libraries over external dependencies whenever possible.
-3. **Modularize Code**: Break down functionality into reusable, modular functions or classes.
-4. **Type Annotations**: Include type annotations for all function arguments and return values.
-5. **Function Documentation**: Provide concise Markdown-style docstrings for all functions, including:
-   - A brief description of the function.
-   - Arguments with their types and descriptions.
-   - The return type and description.
-6. **Use Pytest for Tests**: When generating tests, use the `pytest` framework to ensure consistency and ease of testing.
-7. **Group Imports**: All file imports should be kept at the top of the file for readability. When importing keep to the minimum needed from the object to function.
+## ✅ General Coding Principles
 
-## Suggested Python Instructions
-### 1. Generate a Utility Function
-- Create a function that performs a specific task, such as file handling or data processing.
-- Example:
-    ```python
-    def read_file(file_path: str) -> List[str]:
-        """
-        Reads a file and returns its contents as a list of lines.
+* Generate **clear and concise** code that solves the problem directly.
+* Follow **PEP-8** standards for formatting and naming conventions.
+* Keep code **modular and reusable** with single-responsibility functions and classes.
+* Avoid redundant or overly complex constructs.
+* Always prefer built-in or standard library features when suitable.
 
-        Args:
-            file_path (str): The path to the file.
+## 🧠 Code Structure and Practices
 
-        Returns:
-            List[str]: A list of lines from the file.
-        """
-        with open(file_path, 'r') as file:
-            return file.readlines()
-    ```
+* Use **explicit type hints** for all functions, parameters, and return values.
+* Add **docstrings** to all public functions, classes, and modules using [PEP 257](https://www.python.org/dev/peps/pep-0257/) conventions.
+* Use **f-strings** for string formatting.
+* Encapsulate constants using `ALL_CAPS` naming and group them near the top of the file.
+* Avoid side effects in module-level code (e.g., wrap run logic in `if __name__ == "__main__":`).
 
-### 2. Generate a Class with Methods
-- Define a class to encapsulate related functionality.
-- Example:
-    ```python
-    class FileProcessor:
-        """
-        A class to handle file processing tasks.
-        """
+## 🧪 Testing with Pytest
 
-        def __init__(self, file_path: str):
-            """
-            Initializes the FileProcessor with a file path.
+* Generate test functions using the `pytest` framework.
+* Each function or method should have at least one corresponding unit test.
+* Use descriptive test names (e.g., `test_function_behavior_under_condition`).
+* Use `pytest.mark.parametrize` for testing multiple input/output scenarios when applicable.
+* Keep tests **isolated** and **stateless**.
 
-            Args:
-                file_path (str): The path to the file.
-            """
-            self.file_path = file_path
+## 📄 Documentation and Comments
 
-        def get_file_size(self) -> int:
-            """
-            Returns the size of the file in bytes.
+* Always include a module-level docstring summarizing the file purpose.
+* Use inline comments **sparingly**, only to clarify non-obvious logic.
+* Avoid repeating information in comments that is already evident from code.
 
-            Returns:
-                int: The size of the file in bytes.
-            """
-            return os.path.getsize(self.file_path)
-    ```
+## 🔒 Error Handling
 
-### 3. Generate Error Handling Code
-- Include proper error handling using `try-except` blocks.
-- Example:
-    ```python
-    def safe_divide(a: float, b: float) -> Optional[float]:
-        """
-        Safely divides two numbers, returning None if division by zero occurs.
+* Use appropriate exception handling with clear, specific exception types.
+* Avoid using bare `except:` blocks.
+* Validate inputs and raise exceptions early for invalid states.
 
-        Args:
-            a (float): The numerator.
-            b (float): The denominator.
+## 🧰 Suggested Imports and Libraries
 
-        Returns:
-            Optional[float]: The result of the division, or None if division by zero.
-        """
-        try:
-            return a / b
-        except ZeroDivisionError:
-            return None
-    ```
+* Keep all imports at the top of the file and ensure 
+* Use `typing` for type annotations (e.g., `List`, `Dict`, `Optional`, `Tuple`).
+* Use `dataclasses` for simple data containers when appropriate.
+* Use `pathlib` for file system paths instead of `os.path`.
+* Prefer `enumerate()` and `zip()` over manual index tracking.
 
-### 4. Generate Logging Code
-- Use Python's built-in `logging` module for logging.
-- Example:
-    ```python
-    import logging
+---
 
-    logging.basicConfig(level=logging.INFO)
+## Example Template for Copilot
 
-    def log_message(message: str) -> None:
-        """
-        Logs a message at the INFO level.
+```python
+from typing import List, Optional
 
-        Args:
-            message (str): The message to log.
-        """
-        logging.info(message)
-    ```
+def filter_even_numbers(numbers: List[int]) -> List[int]:
+    """
+    Filter out even numbers from a list of integers.
 
-## Additional Notes
-- Always test generated code for correctness and edge cases.
-- Use meaningful variable and function names to improve code readability.
-- Avoid hardcoding values; use constants or configuration files where appropriate.
-- When generating documentation focus on the functionality over describing the structure of the code. 
-- Evaluate generated code for security concerns and highlight any potential issues and possible remedies when providing suggestions.
+    Args:
+        numbers (List[int]): List of integers to filter.
+
+    Returns:
+        List[int]: List containing only odd numbers.
+    """
+    return [n for n in numbers if n % 2 != 0]
+```
+
+```python
+# test_module.py
+import pytest
+from my_module import filter_even_numbers
+
+@pytest.mark.parametrize("input_data,expected_output", [
+    ([1, 2, 3, 4], [1, 3]),
+    ([2, 4, 6], []),
+    ([1, 3, 5], [1, 3, 5]),
+])
+def test_filter_even_numbers(input_data, expected_output):
+    assert filter_even_numbers(input_data) == expected_output
+```
+
+> Use this style consistently for all Python code generation with GitHub Copilot.
+
+---
+
+By adhering to these practices, Copilot will generate Python code that is production-quality, easy to understand, and ready for collaborative development.

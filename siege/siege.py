@@ -14,8 +14,8 @@ from excel import (
     extract_positions_from_excel,
     extract_date_from_filename,
 )
-from siege_planner import AssignmentPlanner, Position
-from siege_utils import build_changeset, load_recent_siege_files
+from .siege_planner import AssignmentPlanner, Position
+from .siege_utils import build_changeset, load_recent_siege_files
 
 
 root = "E:\\My Files\\Games\\Raid Shadow Legends\\siege\\"

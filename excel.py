@@ -3,7 +3,7 @@ import re
 import xlwings as xw
 from pdf2image import convert_from_path
 from typing import List, Tuple, Optional
-from siege_planner import Position
+from siege.siege_planner import Position
 from collections import namedtuple
 
 siege_file = namedtuple("SiegeFile", ["file_name", "date"])

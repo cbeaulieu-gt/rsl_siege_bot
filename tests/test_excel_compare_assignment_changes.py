@@ -1,6 +1,6 @@
 import pytest
 from typing import Optional
-from siege_planner import Position
+from siege.siege_planner import Position
 from excel import compare_assignment_changes
 
 def make_pos(building, position, group=None, building_number=None):

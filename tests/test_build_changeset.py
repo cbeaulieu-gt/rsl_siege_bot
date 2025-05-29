@@ -1,5 +1,5 @@
 import pytest
-from siege_utils import build_changeset
+from siege.siege_utils import build_changeset
 
 def test_build_changeset_basic():
     changed = {
