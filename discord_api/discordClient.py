@@ -1,16 +1,19 @@
 import discord
 from discord.ext import commands
 import asyncio
+from typing import Callable, Dict, List
 
 from discord_api.discordClientUtils import get_guild_id
 
 class DiscordAPI:
     def __init__(self, guild_id, bot_token):
         self.guild_id = guild_id
+        self.channel_listeners: Dict[int, List[Callable]] = {}  # Store channel listeners
         intents = discord.Intents.default()
         intents.messages = True
         intents.guilds = True
         intents.members = True
+        intents.message_content = True  # Required for message content access
         self.bot = commands.Bot(command_prefix="!", intents=intents)
 
         if not bot_token:
@@ -23,6 +26,25 @@ class DiscordAPI:
         async def on_ready():
             self.bot_ready = True
             print("Bot is ready!")
+
+        @self.bot.event
+        async def on_message(message):
+            # Don't respond to bot's own messages
+            if message.author == self.bot.user:
+                return
+            
+            # Check if there are listeners for this channel
+            channel_id = message.channel.id
+            if channel_id in self.channel_listeners:
+                for callback in self.channel_listeners[channel_id]:
+                    try:
+                        # Call the callback function with the message
+                        if asyncio.iscoroutinefunction(callback):
+                            await callback(message)
+                        else:
+                            callback(message)
+                    except Exception as e:
+                        print(f"Error in channel listener callback: {e}")
 
     async def start_bot(self):
         """
@@ -122,10 +144,84 @@ class DiscordAPI:
         try:
             await member.send(message)
         except discord.Forbidden:
-            print(f"Cannot DM {member["disc"]}: Forbidden.")
+            print(f"Cannot DM {member.name}: Forbidden.")
         except Exception as e:
             print(f"Failed to send DM to {member.name}: {e}")
 
+    async def bind_channel_listener(self, channel_id: int, callback: Callable) -> None:
+        """
+        Binds a listener function to a specific channel that will be invoked when new messages are posted.
+
+        Args:
+            channel_id (int): The ID of the channel to listen to.
+            callback (Callable): The function to call when a message is received. 
+                                Can be sync or async. Will receive the discord.Message object as argument.
+
+        Raises:
+            ValueError: If the channel is not found.
+        """
+        await self.wait_until_ready()
+        
+        # Verify the channel exists and is accessible
+        channel = self.bot.get_channel(channel_id)
+        if not channel:
+            raise ValueError(f"Channel with ID {channel_id} not found or not accessible.")
+        
+        # Add the callback to the listeners for this channel
+        if channel_id not in self.channel_listeners:
+            self.channel_listeners[channel_id] = []
+        
+        self.channel_listeners[channel_id].append(callback)
+        print(f"Listener bound to channel '{channel.name}' (ID: {channel_id})")
+
+    async def unbind_channel_listener(self, channel_id: int, callback: Callable = None) -> None:
+        """
+        Unbinds a listener function from a specific channel.
+
+        Args:
+            channel_id (int): The ID of the channel to stop listening to.
+            callback (Callable, optional): The specific callback to remove. 
+                                         If None, removes all listeners for the channel.
+        """
+        if channel_id not in self.channel_listeners:
+            return
+        
+        if callback is None:
+            # Remove all listeners for this channel
+            del self.channel_listeners[channel_id]
+            print(f"All listeners removed from channel ID: {channel_id}")
+        else:
+            # Remove specific callback
+            if callback in self.channel_listeners[channel_id]:
+                self.channel_listeners[channel_id].remove(callback)
+                print(f"Specific listener removed from channel ID: {channel_id}")
+                
+                # Clean up empty listener list
+                if not self.channel_listeners[channel_id]:
+                    del self.channel_listeners[channel_id]
+
+    async def bind_channel_listener_by_name(self, channel_name: str, callback: Callable) -> None:
+        """
+        Binds a listener function to a specific channel by name.
+
+        Args:
+            channel_name (str): The name of the channel to listen to.
+            callback (Callable): The function to call when a message is received.
+
+        Raises:
+            ValueError: If the channel is not found.
+        """
+        channel_id = await self.get_channel_id_by_name(channel_name)
+        await self.bind_channel_listener(channel_id, callback)
+
+    def get_active_listeners(self) -> Dict[int, int]:
+        """
+        Returns a dictionary of active channel listeners.
+
+        Returns:
+            Dict[int, int]: Mapping of channel_id to number of listeners.
+        """
+        return {channel_id: len(callbacks) for channel_id, callbacks in self.channel_listeners.items()}
 
 async def initialize_discord_client(guild_name, bot_token):
     guild_id = get_guild_id(guild_name)

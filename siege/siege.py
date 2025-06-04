@@ -14,8 +14,9 @@ from excel import (
     extract_positions_from_excel,
     extract_date_from_filename,
 )
-from .siege_planner import AssignmentPlanner, Position
-from .siege_utils import build_changeset, load_recent_siege_files
+from siege.siege_listener import create_siege_listener
+from siege.siege_planner import AssignmentPlanner, Position
+from siege.siege_utils import build_changeset, load_recent_siege_files
 
 
 root = "E:\\My Files\\Games\\Raid Shadow Legends\\siege\\"
@@ -204,3 +205,58 @@ def print_assignments() -> None:
     for position, member in positions:
         print(f"Member: {member} -> {position}")
 
+
+
+# Define the on message handler for the siege listener
+async def on_message_handler(user_id: str, username: str, channel: str, message: str) -> str:
+    """
+    Handles incoming messages from the siege listener and processes them.
+
+    Args:
+        user_id (str): The ID of the user who sent the message.
+        username (str): The username of the user who sent the message.
+        channel (str): The channel where the message was sent.
+        message (str): The content of the message.
+
+    Returns:
+        str: A response message to be sent back to the user.
+    """
+    # Process the message and return a response
+    return f"Received message from {username} in {channel}: {message}"
+
+
+# Run the main bot function 
+async def run_bot_function(guild_name: str) -> None:
+    """
+    Runs the main bot function to process siege assignments and interact with Discord.
+
+    Args:
+        guild_name (str): The name of the Discord guild to monitor.
+        send_dm (bool): Whether to send DMs to members about assignment changes.
+        post_message (bool): Whether to post assignment images and messages to Discord channels.
+    """
+    
+    # Create and initialize the Discord client
+    discord_client = await initialize_discord_client(guild_name, BOTTOKEN)
+    if not discord_client:
+        raise RuntimeError("Failed to initialize Discord client.")
+    
+    # Create the siege listener and attach the input handler to the Discord client
+    siege_listener = await create_siege_listener(discord_client, guild_name, "clan-siege-talk-strategy", on_message_handler)
+    
+    if not siege_listener:
+        raise RuntimeError("Failed to create siege listener.")
+
+    # Drop into the event loop to keep the bot running
+    try:
+        # Print out message to indicate the bot is running
+        while True:
+            print(f"Bot is running and listening for messages in guild '{guild_name}'...")
+            asyncio.wait(100)
+        
+    except KeyboardInterrupt:
+        print("Bot stopped by user.")
+    except Exception as e:
+        print(f"Error running bot: {e}")
+    finally:
+        await discord_client.close()

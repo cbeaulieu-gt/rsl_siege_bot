@@ -12,6 +12,7 @@ import click
 from siege.siege import (
     main_function,
     fetch_channel_members_function,
+    run_bot_function,
     print_assignments as siege_print_assignments,
 )
 
@@ -69,8 +70,8 @@ def run_siege(guild: str, send_dm: bool, post_message: bool) -> None:
 @cli.command("run_bot")
 @click.option(
     '--guild',
-    required=True,
-    help='The guild name to use for running the bot.'
+    default=DEFAULT_GUILD,
+    help='The guild name to use for running commands.'
 )
 def run_bot(guild: str) -> None:
     """
@@ -84,7 +85,6 @@ def run_bot(guild: str) -> None:
     """
     try:
         # Import here to avoid circular imports and missing dependencies
-        from siege.siege import run_bot_function
         asyncio.run(run_bot_function(guild))
     except ImportError as e:
         click.echo(f"Bot functionality not available: {e}", err=True)
@@ -99,8 +99,8 @@ def run_bot(guild: str) -> None:
 @cli.command()
 @click.option(
     '--guild',
-    required=True,
-    help='The guild name to use for fetching members.'
+    default=DEFAULT_GUILD,
+    help='The guild name to use for running commands.'
 )
 def fetch_members(guild: str) -> None:
     """
