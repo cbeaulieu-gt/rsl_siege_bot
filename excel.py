@@ -3,15 +3,27 @@ import re
 import xlwings as xw
 from pdf2image import convert_from_path
 from typing import List, Tuple, Optional
-from siege.siege_planner import Position
+from siege.siege_planner import Position, Member, SiegeAssignment
 from collections import namedtuple
 
 siege_file = namedtuple("SiegeFile", ["file_name", "date"])
 sheet = namedtuple("Sheet", ["name", "cell_range"])
 class SiegeExcelSheets:
-    assignment_sheet = sheet("Assignments", "A1:E42")
-    reserves_sheet = sheet("Reserves", "A1:D28")
 
+    DEFAULT_MEMBER_COUNT = 30
+    
+    @classmethod
+    def set_member_count(cls, count: int):
+        """
+        Sets the number of members in the Members sheet.
+        """
+        cls.members_sheet = sheet("Members", f"A1:E{count}")
+        cls.assignment_sheet = sheet("Assignments", f"A1:E{count}")
+        cls.reserves_sheet = sheet("Reserves", f"A1:D{count}")
+
+    members_sheet = sheet("Members", "A1:E{DEFAULT_MEMBER_COUNT}")
+    assignment_sheet = sheet("Assignments", "A1:E{DEFAULT_MEMBER_COUNT}")
+    reserves_sheet = sheet("Reserves", "A1:D{DEFAULT_MEMBER_COUNT}")
 
 def compare_sheets_between_workbooks(file_path1, file_path2, sheet_name, cell_range):
     """
@@ -62,7 +74,6 @@ def convert_pdf_to_png(pdf_file, output_png):
 
 # Example usage
 
-
 def print_excel_range(file_path, sheet_name, cell_range, output_file):
     # Open the workbook and access the sheet
     wb = xw.Book(file_path)
@@ -79,6 +90,7 @@ def print_excel_range(file_path, sheet_name, cell_range, output_file):
         IncludeDocProperties=True,
         IgnorePrintAreas=False
     )
+
 
     # Close the workbook without saving
     wb.close()
@@ -239,6 +251,8 @@ def extract_positions_from_excel(file_path: str) -> List[Tuple[Position, str]]:
         app.quit()
     return positions
 
+
+
 def get_full_tower_name(alias: str) -> str:
     """
     Maps a tower alias to its full name.
@@ -317,3 +331,143 @@ def get_recent_siege_files(root)-> tuple[siege_file]:
         raise ValueError("Not enough siege files found in the directory.")
 
     return siege_files[0], siege_files[1]
+
+def extract_members_from_reserves_sheet(file_path: str) -> List[SiegeAssignment]:
+    """
+    Extracts a list of SiegeAssignment objects from the 'Reserves' sheet of an Excel file.
+
+    Args:
+        file_path (str): Path to the Excel workbook.
+
+    Returns:
+        List[SiegeAssignment]: A list of SiegeAssignment objects extracted from the Reserves sheet.
+    
+    Column mapping:
+        A -> Member Name
+        B -> Unused
+        C -> Set Reserve (indicated by presence of 'X')
+        D -> Attack Day (1 or 2)
+    """
+    siege_assignments: List[SiegeAssignment] = []
+    app = xw.App(visible=False)
+    wb = app.books.open(file_path)
+    
+    try:
+        reserves_sheet = SiegeExcelSheets.reserves_sheet
+        sheet = wb.sheets[reserves_sheet.name]
+        data = sheet.range(reserves_sheet.cell_range).value
+        
+        for row in data[1:]:  # Skip header row
+            if not row or len(row) < 4:
+                continue
+                
+            member_name = row[0]
+            # Column B is unused (row[1])
+            set_reserve_cell = row[2]
+            attack_day_cell = row[3]
+            
+            # Skip rows with no member name
+            if not member_name or str(member_name).strip() == '':
+                continue
+            
+            try:
+                # Parse Set Reserve - check for presence of 'X' character
+                set_reserve = False
+                if set_reserve_cell:
+                    set_reserve_str = str(set_reserve_cell).strip().upper()
+                    set_reserve = 'X' in set_reserve_str
+                
+                # Parse Attack Day - must be 1 or 2
+                attack_day = None
+                if attack_day_cell:
+                    try:
+                        attack_day = int(float(attack_day_cell))  # Handle potential float conversion
+                        if attack_day not in (1, 2):
+                            print(f"Warning: Invalid attack day {attack_day} for member {member_name}. Skipping member.")
+                            continue
+                    except (ValueError, TypeError):
+                        print(f"Warning: Could not parse attack day '{attack_day_cell}' for member {member_name}. Skipping member.")
+                        continue
+                else:
+                    print(f"Warning: No attack day specified for member {member_name}. Skipping member.")
+                    continue                # Create SiegeAssignment object
+                siege_assignment = SiegeAssignment(
+                    name=str(member_name).strip(),
+                    attack_day=attack_day,
+                    set_reserve=set_reserve
+                )
+                siege_assignments.append(siege_assignment)
+                
+            except Exception as e:
+                print(f"Error creating SiegeAssignment object for {member_name}: {e}")
+                continue
+                
+    finally:
+        wb.close()
+        app.quit()
+    
+    return siege_assignments
+
+
+def extract_members_from_members_sheet(file_path: str) -> List[Member]:
+    """
+    Extracts a list of Member objects from the 'Members' sheet of an Excel file.
+
+    Args:
+        file_path (str): Path to the Excel workbook.
+
+    Returns:
+        List[Member]: A list of Member objects extracted from the Members sheet.
+    
+    Column mapping:
+        A -> Member Name
+        E -> PostRestrictions (comma-separated values)
+        All other columns are ignored
+    """
+    members: List[Member] = []
+    app = xw.App(visible=False)
+    wb = app.books.open(file_path)
+    
+    try:
+        members_sheet = SiegeExcelSheets.members_sheet
+        sheet = wb.sheets[members_sheet.name]
+        data = sheet.range(members_sheet.cell_range).value
+        
+        for row in data[1:]:  # Skip header row
+            if not row or len(row) < 1:
+                continue
+                
+            member_name = row[0]
+            
+            # Skip rows with no member name
+            if not member_name or str(member_name).strip() == '':
+                continue
+            
+            try:
+                # Parse PostRestrictions from column E (index 4)
+                post_restriction = None
+                if len(row) > 4 and row[4]:
+                    post_restriction_str = str(row[4]).strip()
+                    if post_restriction_str:
+                        # Split by comma and clean up whitespace
+                        post_restriction = [item.strip() for item in post_restriction_str.split(',') if item.strip()]
+                        # Set to None if empty list
+                        if not post_restriction:
+                            post_restriction = None
+                  # Create Member object with only name and post_restriction
+                # since siege assignment info is not available in the Members sheet
+                member = Member(
+                    name=str(member_name).strip(),
+                    post_restriction=post_restriction
+                )
+                members.append(member)
+                
+            except Exception as e:
+                print(f"Error creating Member object for {member_name}: {e}")
+                continue
+                
+    finally:
+        wb.close()
+        app.quit()
+    
+    return members
