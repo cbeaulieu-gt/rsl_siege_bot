@@ -203,10 +203,39 @@ def send_siege_assignment_dm(discord_client, member_obj, assignments, siege_date
         ":warning: **This bot is a work in progress. Please verify assignments manually if needed.** :warning:\n"
     )
     title = f"[1MOM] Masters of Magicka Siege Assignment ({siege_date})"
-    table = format_assignment_table(assignments['old'], assignments['new'], assignments['unchanged'])
-    reserve_str = f"Reserve Status: {'Yes' if set_reserve else 'No'}" if set_reserve is not None else "Reserve Status: Unknown"
-    attack_day_str = f"Attack Day: {attack_day}" if attack_day is not None else "Attack Day: Unknown"
-    dm_message = f"{disclaimer}\n\n**{title}**\n\n{table}\n\n{reserve_str}\n{attack_day_str}"
+    reserve_str = 'Yes' if set_reserve else 'No' if set_reserve is not None else 'Unknown'
+    attack_day_str = str(attack_day) if attack_day is not None else 'Unknown'
+    member_info = (
+        f"**Have Reserve Set:** {reserve_str}\n"
+        f"**Attack Day:** {attack_day_str}\n"
+    )
+    # Organize assignments into categories
+    old = assignments['old']
+    new = assignments['new']
+    unchanged = assignments['unchanged']
+
+    # Only include non-empty categories
+    sections = []
+    if unchanged:
+        unchanged_lines = '\n'.join(f"- {discord_formatter(pos)}" for pos in unchanged)
+        sections.append(f":shield: ** No Change ** :shield:\n{unchanged_lines}")
+    if old:
+        old_lines = '\n'.join(f"- {discord_formatter(pos)}" for pos in old)
+        sections.append(f":x: ** Remove From ** :x:\n{old_lines}")
+    if new:
+        new_lines = '\n'.join(f"- {discord_formatter(pos)}" for pos in new)
+        sections.append(f":crossed_swords: ** Set At ** :crossed_swords:\n{new_lines}")
+    if not sections:
+        assignments_section = "*No assignments to display.*"
+    else:
+        assignments_section = '\n\n'.join(sections)
+
+    dm_message = (
+        f"{disclaimer}\n"
+        f"**{title}**\n\n"
+        f"{member_info}\n"
+        f"{assignments_section}\n"
+    )
     return discord_client.send_message(member_obj, dm_message)
 
 def get_unchanged_positions(old_assignments: dict, new_assignments: dict) -> dict:
@@ -269,4 +298,33 @@ def print_assignments() -> None:
     print("Assignments:")
     for position, member in positions:
         print(f"Member: {member} -> {position}")
+
+def discord_formatter(position: Position) -> str:
+    """
+    Format a siege assignment position for Discord with color-coded building name and structure:
+    Building Name # / Group # / Position # (Post Condition if applicable)
+    If group is None, omit it. Building name is colored by type.
+    """
+    # Discord does not support true color, but we can use code blocks for color hints or emoji
+    building_colors = {
+        'Stronghold': ':red_circle:',
+        'Defense Tower': ':green_circle:',
+        'Mana Shrine': ':yellow_circle:',
+        'Magic Tower': ':blue_circle:',
+        'Post': ':white_circle:'
+    }
+    color = building_colors.get(position.building, '')
+    building = f"{color} {position.building}" if color else position.building
+    if getattr(position, 'building_number', None) is not None:
+        building = f"{building} {position.building_number}"
+    parts = [building]
+    if getattr(position, 'group', None) is not None:
+        parts.append(f"Group {position.group}")
+    if getattr(position, 'position', None) is not None and position.building != 'Post':
+        parts.append(f"Pos {position.position}")
+    # Post condition (if any)
+    post_condition = getattr(position, 'post_condition', None)
+    if post_condition:
+        parts.append(f"({post_condition})")
+    return ' / '.join(parts)
 
