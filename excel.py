@@ -11,6 +11,8 @@ sheet = namedtuple("Sheet", ["name", "cell_range"])
 class SiegeExcelSheets:
 
     DEFAULT_MEMBER_COUNT = 30
+    NUM_ASSIGNMENTS_GROUPS = 39
+    ASSIGNMENT_SHEET_OFFSET = 3  # Offset for the assignments sheet
     
     @classmethod
     def set_member_count(cls, count: int):
@@ -21,9 +23,9 @@ class SiegeExcelSheets:
         cls.assignment_sheet = sheet("Assignments", f"A1:E{count}")
         cls.reserves_sheet = sheet("Reserves", f"A1:D{count}")
 
-    members_sheet = sheet("Members", "A1:E{DEFAULT_MEMBER_COUNT}")
-    assignment_sheet = sheet("Assignments", "A1:E{DEFAULT_MEMBER_COUNT}")
-    reserves_sheet = sheet("Reserves", "A1:D{DEFAULT_MEMBER_COUNT}")
+    members_sheet = sheet("Members", f"A1:E{DEFAULT_MEMBER_COUNT}")
+    assignment_sheet = sheet("Assignments", f"A1:E{NUM_ASSIGNMENTS_GROUPS + ASSIGNMENT_SHEET_OFFSET}")
+    reserves_sheet = sheet("Reserves", f"A1:D{DEFAULT_MEMBER_COUNT}")
 
 def compare_sheets_between_workbooks(file_path1, file_path2, sheet_name, cell_range):
     """
@@ -332,12 +334,13 @@ def get_recent_siege_files(root)-> tuple[siege_file]:
 
     return siege_files[0], siege_files[1]
 
-def extract_members_from_reserves_sheet(file_path: str) -> List[SiegeAssignment]:
+def extract_members_from_reserves_sheet(root: str, file_name: str) -> List[SiegeAssignment]:
     """
     Extracts a list of SiegeAssignment objects from the 'Reserves' sheet of an Excel file.
 
     Args:
-        file_path (str): Path to the Excel workbook.
+        root (str): Root directory path containing siege files.
+        file_name (str): The name of the Excel file.
 
     Returns:
         List[SiegeAssignment]: A list of SiegeAssignment objects extracted from the Reserves sheet.
@@ -348,6 +351,7 @@ def extract_members_from_reserves_sheet(file_path: str) -> List[SiegeAssignment]
         C -> Set Reserve (indicated by presence of 'X')
         D -> Attack Day (1 or 2)
     """
+    file_path = os.path.join(root, file_name)
     siege_assignments: List[SiegeAssignment] = []
     app = xw.App(visible=False)
     wb = app.books.open(file_path)
@@ -409,12 +413,13 @@ def extract_members_from_reserves_sheet(file_path: str) -> List[SiegeAssignment]
     return siege_assignments
 
 
-def extract_members_from_members_sheet(file_path: str) -> List[Member]:
+def extract_members_from_members_sheet(root: str, file_name: str) -> List[Member]:
     """
     Extracts a list of Member objects from the 'Members' sheet of an Excel file.
 
     Args:
-        file_path (str): Path to the Excel workbook.
+        root (str): Root directory path containing siege files.
+        file_name (str): The name of the Excel file.
 
     Returns:
         List[Member]: A list of Member objects extracted from the Members sheet.
@@ -424,6 +429,7 @@ def extract_members_from_members_sheet(file_path: str) -> List[Member]:
         E -> PostRestrictions (comma-separated values)
         All other columns are ignored
     """
+    file_path = os.path.join(root, file_name)
     members: List[Member] = []
     app = xw.App(visible=False)
     wb = app.books.open(file_path)

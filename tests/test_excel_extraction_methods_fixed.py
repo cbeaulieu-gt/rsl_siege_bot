@@ -59,7 +59,7 @@ class TestExtractMembersFromReservesSheet:
             mock_reserves_sheet.cell_range = "A1:D30"
             
             # Execute function
-            result = extract_members_from_reserves_sheet("test_file.xlsx")
+            result = extract_members_from_reserves_sheet("/root", "test_file.xlsx")
             
             # Assertions
             assert len(result) == 4
@@ -105,7 +105,7 @@ class TestExtractMembersFromReservesSheet:
             mock_reserves_sheet.name = "Reserves"
             mock_reserves_sheet.cell_range = "A1:D30"
             
-            result = extract_members_from_reserves_sheet("test_file.xlsx")
+            result = extract_members_from_reserves_sheet("/root", "test_file.xlsx")
             
             # Should only extract Alice and Bob (valid entries)
             assert len(result) == 2
@@ -132,7 +132,7 @@ class TestExtractMembersFromReservesSheet:
             mock_reserves_sheet.name = "Reserves"
             mock_reserves_sheet.cell_range = "A1:D30"
             
-            result = extract_members_from_reserves_sheet("test_file.xlsx")
+            result = extract_members_from_reserves_sheet("/root", "test_file.xlsx")
             
             # Should only extract Alice (only valid entry)
             assert len(result) == 1
@@ -161,7 +161,7 @@ class TestExtractMembersFromReservesSheet:
             mock_reserves_sheet.name = "Reserves"
             mock_reserves_sheet.cell_range = "A1:D30"
             
-            result = extract_members_from_reserves_sheet("test_file.xlsx")
+            result = extract_members_from_reserves_sheet("/root", "test_file.xlsx")
             
             assert len(result) == 6
             assert result[0].set_reserve == True   # Alice: "X"
@@ -190,7 +190,7 @@ class TestExtractMembersFromReservesSheet:
             mock_reserves_sheet.name = "Reserves"
             mock_reserves_sheet.cell_range = "A1:D30"
             
-            result = extract_members_from_reserves_sheet("test_file.xlsx")
+            result = extract_members_from_reserves_sheet("/root", "test_file.xlsx")
             
             # Should only extract Alice (only complete row)
             assert len(result) == 1
@@ -214,7 +214,7 @@ class TestExtractMembersFromReservesSheet:
             mock_reserves_sheet.name = "Reserves"
             mock_reserves_sheet.cell_range = "A1:D30"
             
-            result = extract_members_from_reserves_sheet("test_file.xlsx")
+            result = extract_members_from_reserves_sheet("/root", "test_file.xlsx")
             
             assert len(result) == 2
             assert result[0].name == "Alice"
@@ -239,7 +239,7 @@ class TestExtractMembersFromReservesSheet:
             mock_reserves_sheet.name = "Reserves"
             mock_reserves_sheet.cell_range = "A1:D30"
             
-            result = extract_members_from_reserves_sheet("test_file.xlsx")
+            result = extract_members_from_reserves_sheet("/root", "test_file.xlsx")
             
             # Verify cleanup methods were called
             mock_wb.close.assert_called_once()
@@ -269,7 +269,7 @@ class TestExtractMembersFromMembersSheet:
             mock_members_sheet.name = "Members"
             mock_members_sheet.cell_range = "A1:E30"
             
-            result = extract_members_from_members_sheet("test_file.xlsx")
+            result = extract_members_from_members_sheet("/root", "test_file.xlsx")
             
             assert len(result) == 4
             
@@ -310,7 +310,7 @@ class TestExtractMembersFromMembersSheet:
             mock_members_sheet.name = "Members"
             mock_members_sheet.cell_range = "A1:E30"
             
-            result = extract_members_from_members_sheet("test_file.xlsx")
+            result = extract_members_from_members_sheet("/root", "test_file.xlsx")
             
             # Should only extract Alice and Bob (valid entries)
             assert len(result) == 2
@@ -340,7 +340,7 @@ class TestExtractMembersFromMembersSheet:
             mock_members_sheet.name = "Members"
             mock_members_sheet.cell_range = "A1:E30"
             
-            result = extract_members_from_members_sheet("test_file.xlsx")
+            result = extract_members_from_members_sheet("/root", "test_file.xlsx")
             
             assert len(result) == 7
             assert result[0].post_restriction == ["Post1", "Post2", "Post3"]  # Alice
@@ -370,7 +370,7 @@ class TestExtractMembersFromMembersSheet:
             mock_members_sheet.name = "Members"
             mock_members_sheet.cell_range = "A1:E30"
             
-            result = extract_members_from_members_sheet("test_file.xlsx")
+            result = extract_members_from_members_sheet("/root", "test_file.xlsx")
             
             assert len(result) == 3
             assert result[0].name == "Alice"
@@ -397,7 +397,7 @@ class TestExtractMembersFromMembersSheet:
             mock_members_sheet.name = "Members"
             mock_members_sheet.cell_range = "A1:E30"
             
-            result = extract_members_from_members_sheet("test_file.xlsx")
+            result = extract_members_from_members_sheet("/root", "test_file.xlsx")
             
             # Verify cleanup methods were called
             mock_wb.close.assert_called_once()
