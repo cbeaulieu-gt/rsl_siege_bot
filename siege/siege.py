@@ -11,6 +11,8 @@ from excel import (
     SiegeExcelSheets,
     export_siege_sheet,
     compare_assignment_changes,
+    extract_members_from_members_sheet,
+    extract_members_from_reserves_sheet,
     extract_positions_from_excel,
     extract_date_from_filename,
 )
@@ -40,6 +42,16 @@ async def main_function(guild_name: str, send_dm: bool, post_message: bool) -> N
 
     assignment_sheet_image = export_siege_sheet(root, SiegeExcelSheets.assignment_sheet, siege_planner.most_recent_file.file_name, root)
     reserves_sheet_image = export_siege_sheet(root, SiegeExcelSheets.reserves_sheet, siege_planner.most_recent_file.file_name, root)
+
+    members_set = extract_members_from_members_sheet(root, siege_planner.most_recent_file.file_name)
+    siege_assignments = extract_members_from_reserves_sheet(root, siege_planner.most_recent_file.file_name)
+
+    # Map siege_assignments by name for quick lookup
+    assignment_map = {a.name: a for a in siege_assignments}
+    for member in members_set:
+        assignment = assignment_map.get(member.name)
+        if assignment:
+            member.siege_assignment = assignment
 
     if post_message:
         channel = "clan-siege-assignment-images"
@@ -73,7 +85,7 @@ async def main_function(guild_name: str, send_dm: bool, post_message: bool) -> N
     unchanged_assignments = get_unchanged_positions(old_assignments, new_assignments)
 
     # Map Discord members by nickname to changed assignments and print
-    send_all = send_siege_assignments(discord_client, changed_assignments, unchanged_assignments, siege_planner.most_recent_file.date, send_dm)
+    send_all = send_siege_assignments(discord_client, changed_assignments, unchanged_assignments, siege_planner.most_recent_file.date, send_dm, members_set)
     await send_all()
 
 async def fetch_channel_members_function(guild_name):
@@ -86,32 +98,82 @@ async def fetch_channel_members_function(guild_name):
     for member in members:
         print(f"Username: {member['username']}, Nickname: {member['nickname']}")
 
-def send_siege_assignments(discord_client, changed_assignments, unchanged_assignments, siege_date, send_dm: bool = False):
+def format_assignment_summary(assignments: dict, set_reserve=None, attack_day=None) -> str:
+    """
+    Format a multi-line table for assignment changes, including reserve and attack day columns.
+
+    Args:
+        assignments (dict): Dict with 'old', 'new', and 'unchanged' assignment lists.
+        set_reserve (bool, optional): Whether the member is a reserve.
+        attack_day (int, optional): The member's attack day.
+
+    Returns:
+        str: Formatted table string.
+    """
+    old = assignments['old']
+    new = assignments['new']
+    unchanged = assignments['unchanged']
+    max_len = max(len(old), len(new), len(unchanged), 1)
+    old_list = [str(pos) for pos in old] + [''] * (max_len - len(old))
+    new_list = [str(pos) for pos in new] + [''] * (max_len - len(new))
+    unchanged_list = [str(pos) for pos in unchanged] + [''] * (max_len - len(unchanged))
+    reserve_str = 'Yes' if set_reserve else 'No' if set_reserve is not None else 'Unknown'
+    attack_day_str = str(attack_day) if attack_day is not None else 'Unknown'
+    reserve_col = [reserve_str] + [''] * (max_len - 1)
+    attack_day_col = [attack_day_str] + [''] * (max_len - 1)
+    header = f"{'Old':<25} | {'New':<25} | {'Unchanged':<25} | {'Reserve':<8} | {'Attack Day':<10}"
+    sep = '-' * len(header)
+    rows = [f"{old_list[i]:<25} | {new_list[i]:<25} | {unchanged_list[i]:<25} | {reserve_col[i]:<8} | {attack_day_col[i]:<10}" for i in range(max_len)]
+    return '\n'.join([header, sep] + rows)
+
+def send_siege_assignments(
+    discord_client,
+    changed_assignments,
+    unchanged_assignments,
+    siege_date,
+    send_dm: bool = False,
+    members_set=None
+):
     """
     Sends DMs to Discord members with all their siege assignment changes in a single message and prints the changes.
 
     Args:
         discord_client: The DiscordAPI client instance.
-        nickname_to_member (dict): Mapping of member nickname/username to Discord member info.
         changed_assignments (dict): Mapping of member name to (old_pos, new_pos) tuples.
         unchanged_assignments (dict): Mapping of member name to unchanged Position assignments.
+        siege_date (str): The date of the siege (YYYY-MM-DD).
+        send_dm (bool): Whether to send DMs to members about assignment changes.
+        members_set (List[Member], optional): List of Member objects with siege_assignment info.
     """
     print("Changed Siege Assignments:")
     async def send_all():
-        # Group all changes by member
         member_changes = build_changeset(changed_assignments, unchanged_assignments)
-
-        # Fetch full discord.Member objects
         discord_members = await discord_client.get_guild_members_disc()
+        member_lookup = {m.name: m for m in members_set} if members_set else {}
         for member_name, assignments in member_changes.items():
             member_obj = find_discord_member(discord_members, member_name)
+            member_info = member_lookup.get(member_name)
+            set_reserve = None
+            attack_day = None
+            if member_info and getattr(member_info, 'siege_assignment', None):
+                set_reserve = member_info.siege_assignment.set_reserve
+                attack_day = member_info.siege_assignment.attack_day
             if member_obj:
-                print(f"Discord: {getattr(member_obj, 'name', '')} (Nickname: {getattr(member_obj, 'nick', '')}) | Member: {member_name} | Changes: Old: {assignments['old']} | New: {assignments['new']} | Unchanged: {assignments['unchanged']}")
+                summary = format_assignment_summary(assignments, set_reserve, attack_day)
+                print(
+                    f"Discord: {getattr(member_obj, 'name', '')} (Nick: {getattr(member_obj, 'nick', '')}) | Member: {member_name}\n{summary}"
+                )
                 if send_dm:
                     try:
-                        # Wait for 1 second to avoid hitting Discord's rate limit
                         await asyncio.sleep(1)
-                        await send_siege_assignment_dm(discord_client, member_obj, assignments, siege_date)
+                        await send_siege_assignment_dm(
+                            discord_client,
+                            member_obj,
+                            assignments,
+                            siege_date,
+                            set_reserve=set_reserve,
+                            attack_day=attack_day
+                        )
                     except Exception as e:
                         print(f"Failed to DM {member_name}: {e}")
             else:
@@ -125,22 +187,55 @@ def send_siege_assignments(discord_client, changed_assignments, unchanged_assign
                     print(f"Member: {member_name} | Unchanged: {unchanged_pos} (No Discord match)")
     return send_all
 
-def send_siege_assignment_dm(discord_client, member_obj, assignments, siege_date):
+def send_siege_assignment_dm(discord_client, member_obj, assignments, siege_date, set_reserve=None, attack_day=None):
     """
-    Sends a DM to a Discord member with their siege assignment changes, including unchanged, old, and new assignments, and siege date.
+    Sends a DM to a Discord member with their siege assignment changes, reserve status, attack day, and siege date.
 
     Args:
         discord_client: The DiscordAPI client instance.
         member_obj: The discord.Member object to DM.
         assignments (dict): Dict with 'old', 'new', and 'unchanged' assignment lists.
         siege_date (str): The date of the siege (YYYY-MM-DD).
+        set_reserve (bool, optional): Whether the member is a reserve.
+        attack_day (int, optional): The member's attack day.
     """
     disclaimer = (
         ":warning: **This bot is a work in progress. Please verify assignments manually if needed.** :warning:\n"
     )
     title = f"[1MOM] Masters of Magicka Siege Assignment ({siege_date})"
-    table = format_assignment_table(assignments['old'], assignments['new'], assignments['unchanged'])
-    dm_message = f"{disclaimer}\n\n**{title}**\n\n{table}"
+    reserve_str = 'Yes' if set_reserve else 'No' if set_reserve is not None else 'Unknown'
+    attack_day_str = str(attack_day) if attack_day is not None else 'Unknown'
+    member_info = (
+        f"**Have Reserve Set:** {reserve_str}\n"
+        f"**Attack Day:** {attack_day_str}\n"
+    )
+    # Organize assignments into categories
+    old = assignments['old']
+    new = assignments['new']
+    unchanged = assignments['unchanged']
+
+    # Only include non-empty categories
+    sections = []
+    if unchanged:
+        unchanged_lines = '\n'.join(f"- {discord_formatter(pos)}" for pos in unchanged)
+        sections.append(f":shield: ** No Change ** :shield:\n{unchanged_lines}")
+    if old:
+        old_lines = '\n'.join(f"- {discord_formatter(pos)}" for pos in old)
+        sections.append(f":x: ** Remove From ** :x:\n{old_lines}")
+    if new:
+        new_lines = '\n'.join(f"- {discord_formatter(pos)}" for pos in new)
+        sections.append(f":crossed_swords: ** Set At ** :crossed_swords:\n{new_lines}")
+    if not sections:
+        assignments_section = "*No assignments to display.*"
+    else:
+        assignments_section = '\n\n'.join(sections)
+
+    dm_message = (
+        f"{disclaimer}\n"
+        f"**{title}**\n\n"
+        f"{member_info}\n"
+        f"{assignments_section}\n"
+    )
     return discord_client.send_message(member_obj, dm_message)
 
 def get_unchanged_positions(old_assignments: dict, new_assignments: dict) -> dict:
@@ -203,4 +298,33 @@ def print_assignments() -> None:
     print("Assignments:")
     for position, member in positions:
         print(f"Member: {member} -> {position}")
+
+def discord_formatter(position: Position) -> str:
+    """
+    Format a siege assignment position for Discord with color-coded building name and structure:
+    Building Name # / Group # / Position # (Post Condition if applicable)
+    If group is None, omit it. Building name is colored by type.
+    """
+    # Discord does not support true color, but we can use code blocks for color hints or emoji
+    building_colors = {
+        'Stronghold': ':red_circle:',
+        'Defense Tower': ':green_circle:',
+        'Mana Shrine': ':yellow_circle:',
+        'Magic Tower': ':blue_circle:',
+        'Post': ':white_circle:'
+    }
+    color = building_colors.get(position.building, '')
+    building = f"{color} {position.building}" if color else position.building
+    if getattr(position, 'building_number', None) is not None:
+        building = f"{building} {position.building_number}"
+    parts = [building]
+    if getattr(position, 'group', None) is not None:
+        parts.append(f"Group {position.group}")
+    if getattr(position, 'position', None) is not None and position.building != 'Post':
+        parts.append(f"Pos {position.position}")
+    # Post condition (if any)
+    post_condition = getattr(position, 'post_condition', None)
+    if post_condition:
+        parts.append(f"({post_condition})")
+    return ' / '.join(parts)
 
