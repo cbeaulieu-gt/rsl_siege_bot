@@ -9,6 +9,9 @@ from typing import Optional
 
 import click
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from siege.siege import (
     main_function,
     fetch_channel_members_function,
