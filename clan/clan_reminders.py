@@ -148,7 +148,7 @@ def initialize_reminders(config_path: str = "guild_config.ini", discord_client: 
                 raise ValueError(f"No send function found for reminder '{reminder_name}'. Expected function: {func_name}")
     return reminders
 
-def daily_callback_template(day: datetime.date, reminders: List[Reminder], config_path: str = "guild_config.ini") -> None:
+async def daily_callback_template(day: datetime.date, reminders: List[Reminder], config_path: str = "guild_config.ini") -> None:
     """
     Daily callback function to send reminders based on a list of Reminder objects.
     Each Reminder object handles its own send/tracking logic.
@@ -164,31 +164,34 @@ def daily_callback_template(day: datetime.date, reminders: List[Reminder], confi
         for reminder in reminders:
             reminder.clear(config, config_path)
     for reminder in reminders:
-        asyncio.run(reminder.send(day, config, config_path))
+        await reminder.send(day, config, config_path)
 
-def on_clock(callback, sent_flags: dict, *args, **kwargs) -> None:
+async def on_clock(callback, sent_flags: dict, *args, **kwargs) -> None:
     """
     Periodically checks the current date and invokes the callback at the start of each new day.
     Ensures the callback is only invoked once per day by tracking sent_flags.
-
     Args:
         callback (callable): The function to invoke at the start of the day. Must accept 'day' as its first argument.
         sent_flags (dict): A dictionary to track if the reminder was sent for the current date.
         *args: Additional positional arguments to pass to the callback.
         **kwargs: Additional keyword arguments to pass to the callback.
     """
-    def check_and_invoke():
+    import inspect
+    while True:
+        print(f"Checking if it's time to send reminders at {datetime.datetime.now()}")
         now = datetime.datetime.now()
         today = now.date()
         key = f"{callback.__name__}_{today}"
         if not sent_flags.get(key, False):
-            callback(today, *args, **kwargs)
+            if inspect.iscoroutinefunction(callback):
+                await callback(today, *args, **kwargs)
+            else:
+                callback(today, *args, **kwargs)
             sent_flags[key] = True
         # Reset sent_flags for previous days to avoid memory growth
         for k in list(sent_flags.keys()):
             if str(today) not in k:
                 del sent_flags[k]
-        # Schedule next check in 1 hour
-        threading.Timer(3600, check_and_invoke).start()
-    check_and_invoke()
+        # Sleep for 1 hour before checking again
+        await asyncio.sleep(3600)
 

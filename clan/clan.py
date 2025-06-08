@@ -26,13 +26,15 @@ def run_reminders_loop(guild_name: str):
         discord_client = await initialize_discord_client(guild_name, bot_token=bot_token)
         reminders = initialize_reminders(config_path="guild_config.ini", discord_client=discord_client)
         sent_flags = {}
-        on_clock(
+
+        print(f"Reminder loop started for guild '{guild_name}'. Reminders will be sent automatically each day.")
+        await on_clock(
             daily_callback_template,
             sent_flags,
             reminders,
             "guild_config.ini"
         )
-        print(f"Reminder loop started for guild '{guild_name}'. Reminders will be sent automatically each day.")
+       
     asyncio.run(_main())
 
 

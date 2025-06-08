@@ -143,12 +143,12 @@ def assignments() -> None:
     default=DEFAULT_GUILD,
     help='The guild name to use for running commands.'
 )
-def run_reminders() -> None:
+def run_reminders(guild) -> None:
     """
     Initializes the reminder set and starts the daily reminder loop.
     """
     from clan.clan import run_reminders_loop
-    run_reminders_loop()
+    run_reminders_loop(guild)
 
 
 @cli.command("send_reminders")
