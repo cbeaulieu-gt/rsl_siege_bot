@@ -137,6 +137,34 @@ def assignments() -> None:
         raise click.Abort()
 
 
+@cli.command("run_reminders")
+@click.option(
+    '--guild',
+    default=DEFAULT_GUILD,
+    help='The guild name to use for running commands.'
+)
+def run_reminders() -> None:
+    """
+    Initializes the reminder set and starts the daily reminder loop.
+    """
+    from clan.clan import run_reminders_loop
+    run_reminders_loop()
+
+
+@cli.command("send_reminders")
+@click.option(
+    '--guild',
+    default=DEFAULT_GUILD,
+    help='The guild name to use for running commands.'
+)
+def send_reminders(guild) -> None:
+    """
+    Immediately sends all reminders for today and exits.
+    """
+    from clan.clan import send_reminders_once
+    send_reminders_once(guild)
+
+
 def main() -> None:
     """Entry point for the CLI application."""
     cli()
