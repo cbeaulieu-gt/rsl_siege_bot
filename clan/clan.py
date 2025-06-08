@@ -1,6 +1,6 @@
 from clan.clan_reminders import initialize_reminders, daily_callback_template, on_clock
-from config import BOTTOKEN
 from discord_api.discordClient import initialize_discord_client
+from discord_api.discordClientUtils import DiscordUtils
 import datetime
 import asyncio
 import configparser
@@ -22,7 +22,8 @@ def run_reminders_loop(guild_name: str):
     Initializes the reminder set and starts the daily reminder loop for the specified guild.
     """
     async def _main():
-        discord_client = await initialize_discord_client(guild_name, bot_token=BOTTOKEN)
+        bot_token = DiscordUtils.get_bot_token()
+        discord_client = await initialize_discord_client(guild_name, bot_token=bot_token)
         reminders = initialize_reminders(config_path="guild_config.ini", discord_client=discord_client)
         sent_flags = {}
         on_clock(
@@ -40,7 +41,8 @@ def send_reminders_once(guild_name: str):
     Immediately sends all reminders for today for the specified guild and exits.
     """
     async def _main():
-        discord_client = await initialize_discord_client(guild_name, bot_token=BOTTOKEN)
+        bot_token = DiscordUtils.get_bot_token()
+        discord_client = await initialize_discord_client(guild_name, bot_token=bot_token)
         reminders = initialize_reminders(config_path="guild_config.ini", discord_client=discord_client)
         config = get_config_parser()
         for reminder in reminders:
