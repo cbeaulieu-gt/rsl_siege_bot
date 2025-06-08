@@ -122,7 +122,7 @@ def format_assignment_summary(assignments: dict, set_reserve=None, attack_day=No
     reserve_col = [reserve_str] + [''] * (max_len - 1)
     attack_day_col = [attack_day_str] + [''] * (max_len - 1)
     header = f"{'Old':<25} | {'New':<25} | {'Unchanged':<25} | {'Reserve':<8} | {'Attack Day':<10}"
-    sep = '-' * (25 * 3 + 8 + 12 + 8)
+    sep = '-' * len(header)
     rows = [f"{old_list[i]:<25} | {new_list[i]:<25} | {unchanged_list[i]:<25} | {reserve_col[i]:<8} | {attack_day_col[i]:<10}" for i in range(max_len)]
     return '\n'.join([header, sep] + rows)
 
