@@ -5,6 +5,9 @@ from pdf2image import convert_from_path
 from typing import List, Tuple, Optional
 from siege.siege_planner import Position, Member, SiegeAssignment
 from collections import namedtuple
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 siege_file = namedtuple("SiegeFile", ["file_name", "date"])
 sheet = namedtuple("Sheet", ["name", "cell_range"])
@@ -65,6 +68,7 @@ def compare_sheets_between_workbooks(file_path1, file_path2, sheet_name, cell_ra
         wb1.close()
         wb2.close()
         app.quit()
+        logger.info(f"Compared sheets '{sheet_name}' between '{file_path1}' and '{file_path2}'. Found {len(differences)} differences.")
 
     return differences
 
@@ -72,7 +76,7 @@ def compare_sheets_between_workbooks(file_path1, file_path2, sheet_name, cell_ra
 def convert_pdf_to_png(pdf_file, output_png):
     images = convert_from_path(pdf_file)
     images[0].save(output_png, 'PNG')  # Save the first page as PNG
-    print(f"PDF converted to PNG: {output_png}")
+    logger.info(f"PDF converted to PNG: {output_png}")
 
 # Example usage
 
@@ -97,7 +101,7 @@ def print_excel_range(file_path, sheet_name, cell_range, output_file):
     # Close the workbook without saving
     wb.close()
 
-    print(f"Range '{cell_range}' from sheet '{sheet_name}' has been printed to '{output_file}'.")
+    logger.info(f"Range '{cell_range}' from sheet '{sheet_name}' has been printed to '{output_file}'.")
 
 
 def export_range_as_image(file_path, sheet_name, cell_range, output_image_path):
@@ -121,7 +125,7 @@ def export_range_as_image(file_path, sheet_name, cell_range, output_image_path):
         # Export the range as a PNG
         rng.to_png(output_image_path)
 
-        print(f"Image saved successfully to: {output_image_path}")
+        logger.info(f"Image saved successfully to: {output_image_path}")
         return output_image_path
 
     finally:
@@ -146,6 +150,7 @@ def export_siege_sheet(root: str, sheet: SiegeExcelSheets, file_name: str, outpu
     file_path = os.path.join(root, file_name)
     output_image_path = os.path.join(output_dir, f"{sheet.name}.png")
     export_range_as_image(file_path, sheet.name, sheet.cell_range, output_image_path)
+    logger.info(f"Exported siege sheet '{sheet.name}' from '{file_name}' to '{output_image_path}'.")
     return output_image_path
 
 def parse_building_cell(building_cell: str) -> Tuple[str, Optional[int]]:
@@ -213,7 +218,7 @@ def extract_row_positions(row: list, building_name: str, building_number: Option
                 )
                 positions.append((position, str(member)))
             except Exception as e:
-                print(f"Exception occurred while creating Position: {e}")
+                logger.error(f"Exception occurred while creating Position: {e}")
                 continue
     return positions
 
@@ -251,6 +256,7 @@ def extract_positions_from_excel(file_path: str) -> List[Tuple[Position, str]]:
     finally:
         wb.close()
         app.quit()
+        logger.info(f"Extracted {len(positions)} positions from '{file_path}'.")
     return positions
 
 
@@ -309,6 +315,7 @@ def compare_assignment_changes(old_file: str, new_file: str) -> dict[str, dict[s
                 'old': removed,
                 'new': added
             }
+    logger.info(f"Compared assignments between '{old_file}' and '{new_file}'. Found {len(member_changes)} members with changes.")
     return member_changes
 
 def extract_date_from_filename(filename):
@@ -387,13 +394,13 @@ def extract_members_from_reserves_sheet(root: str, file_name: str) -> List[Siege
                     try:
                         attack_day = int(float(attack_day_cell))  # Handle potential float conversion
                         if attack_day not in (1, 2):
-                            print(f"Warning: Invalid attack day {attack_day} for member {member_name}. Skipping member.")
+                            logger.warning(f"Invalid attack day {attack_day} for member {member_name}. Skipping member.")
                             continue
                     except (ValueError, TypeError):
-                        print(f"Warning: Could not parse attack day '{attack_day_cell}' for member {member_name}. Skipping member.")
+                        logger.warning(f"Could not parse attack day '{attack_day_cell}' for member {member_name}. Skipping member.")
                         continue
                 else:
-                    print(f"Warning: No attack day specified for member {member_name}. Skipping member.")
+                    logger.warning(f"No attack day specified for member {member_name}. Skipping member.")
                     continue                # Create SiegeAssignment object
                 siege_assignment = SiegeAssignment(
                     name=str(member_name).strip(),
@@ -401,11 +408,13 @@ def extract_members_from_reserves_sheet(root: str, file_name: str) -> List[Siege
                     set_reserve=set_reserve
                 )
                 siege_assignments.append(siege_assignment)
+                logger.debug(f"Added SiegeAssignment for member {member_name} (reserve={set_reserve}, attack_day={attack_day})")
                 
             except Exception as e:
-                print(f"Error creating SiegeAssignment object for {member_name}: {e}")
+                logger.error(f"Error creating SiegeAssignment object for {member_name}: {e}")
                 continue
                 
+        logger.info(f"Extracted {len(siege_assignments)} siege assignments from reserves sheet in '{file_name}'.")
     finally:
         wb.close()
         app.quit()
@@ -467,11 +476,13 @@ def extract_members_from_members_sheet(root: str, file_name: str) -> List[Member
                     post_restriction=post_restriction
                 )
                 members.append(member)
+                logger.debug(f"Added Member: {member_name} (restrictions={post_restriction})")
                 
             except Exception as e:
-                print(f"Error creating Member object for {member_name}: {e}")
+                logger.error(f"Error creating Member object for {member_name}: {e}")
                 continue
                 
+        logger.info(f"Extracted {len(members)} members from members sheet in '{file_name}'.")
     finally:
         wb.close()
         app.quit()
