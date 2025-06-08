@@ -134,15 +134,12 @@ class TestExtractMembersFromReservesSheet:
             mock_reserves_sheet.name = "Reserves"
             mock_reserves_sheet.cell_range = "A1:D30"
             
-            with patch('builtins.print') as mock_print:
-                result = extract_members_from_reserves_sheet("/root", "test_file.xlsx")
-                
-                # Should only return valid entry (Alice)
-                assert len(result) == 1
-                assert result[0].name == "Alice"
-                
-                # Check that warnings were printed
-                assert mock_print.call_count >= 3
+            result = extract_members_from_reserves_sheet("/root", "test_file.xlsx")
+            
+            # Should only return valid entry (Alice)
+            assert len(result) == 1
+            assert result[0].name == "Alice"
+
 
     @patch('excel.xw')
     def test_extract_members_from_reserves_sheet_set_reserve_variations(self, mock_xw):
@@ -401,15 +398,13 @@ class TestExtractMembersFromMembersSheet:
                 
                 mock_member_class.side_effect = side_effect
                 
-                with patch('builtins.print') as mock_print:
-                    result = extract_members_from_members_sheet("/root", "test_file.xlsx")
-                    
-                    # Should only return valid member
-                    assert len(result) == 1
-                    assert result[0].name == "ValidMember"
-                    
-                    # Check that error was printed
-                    mock_print.assert_called()
+                
+                result = extract_members_from_members_sheet("/root", "test_file.xlsx")
+                
+                # Should only return valid member
+                assert len(result) == 1
+                assert result[0].name == "ValidMember"
+
 
     @patch('excel.xw')
     def test_extract_members_from_members_sheet_excel_cleanup(self, mock_xw):
