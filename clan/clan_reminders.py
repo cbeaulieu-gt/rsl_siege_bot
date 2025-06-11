@@ -81,7 +81,7 @@ class Reminder:
             with open(config_path, "w") as configfile:
                 config.write(configfile)
 
-async def send_reminder_with_role(discord_client: DiscordAPI, message_body: str, role_name: str = "member", channel: str = "announcements") -> None:
+async def send_reminder_with_role(discord_client: DiscordAPI, message_body: str, role_name: str = "Member", channel: str = "announcements") -> None:
     """
     Sends a reminder message to the specified channel, mentioning the given role.
     Args:
