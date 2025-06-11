@@ -7,10 +7,10 @@ and member management.
 import asyncio
 from typing import Optional
 
-import click
-
 from dotenv import load_dotenv
 load_dotenv()
+
+import click
 
 from siege.siege import (
     main_function,
