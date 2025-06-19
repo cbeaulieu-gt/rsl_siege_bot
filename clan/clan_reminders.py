@@ -7,11 +7,12 @@ import asyncio
 import inspect
 
 class Reminder:
-    def __init__(self, event_name: str, reminder_day: int, discord_client: DiscordAPI = None, send_func=None):
+    def __init__(self, event_name: str, reminder_day: int, discord_client: DiscordAPI = None, send_func=None, utc_time: int = None):
         self.event_name = event_name
         self.reminder_day = reminder_day  # 0=Monday, 1=Tuesday, ..., 6=Sunday
         self.send_func = send_func
         self.discord_client = discord_client
+        self.utc_time = utc_time
 
     @staticmethod
     def from_config(reminder_name: str, config: configparser.ConfigParser, discord_client: DiscordAPI = None) -> 'Reminder':
@@ -24,14 +25,21 @@ class Reminder:
         Returns:
             Reminder: The instantiated Reminder object, or raises KeyError if not found.
         """
-        # Map event names to their send functions
         if "Reminders" not in config:
             raise KeyError(f"No 'Reminders' section in config.")
         rem_cfg = config["Reminders"]
         if reminder_name not in rem_cfg:
             raise KeyError(f"No reminder named '{reminder_name}' in config.")
         reminder_day = int(rem_cfg.get(reminder_name))
-        return Reminder(event_name=reminder_name, reminder_day=reminder_day, discord_client=discord_client)
+        utc_time = None
+        if "ReminderTimes" in config:
+            utc_time_str = config["ReminderTimes"].get(reminder_name.lower())
+            if utc_time_str is not None:
+                try:
+                    utc_time = int(utc_time_str)
+                except Exception:
+                    utc_time = None
+        return Reminder(event_name=reminder_name, reminder_day=reminder_day, discord_client=discord_client, utc_time=utc_time)
 
     def clear(self, config: configparser.ConfigParser, config_path: str = "guild_config.ini") -> None:
         """
@@ -52,13 +60,15 @@ class Reminder:
             with open(config_path, "w") as configfile:
                 config.write(configfile)
 
-    async def send(self, day: datetime.date, config: configparser.ConfigParser, config_path: str = "guild_config.ini", force: bool=False) -> None:
+    def should_send(self, day: datetime.date, config: configparser.ConfigParser, config_path: str = "guild_config.ini") -> bool:
         """
-        Checks if the reminder should be sent for the given day, sends it if needed, and tracks the sent status in the config.
+        Determines if the reminder should be sent for the given day and current time, based on config and reminder times.
         Args:
             day (datetime.date): The current date.
             config (configparser.ConfigParser): The loaded config object.
             config_path (str): Path to the configuration file.
+        Returns:
+            bool: True if the reminder should be sent, False otherwise.
         """
         weekday = day.weekday()
         if "RemindersSent" not in config:
@@ -68,18 +78,54 @@ class Reminder:
         if guild_id is None:
             raise ValueError("Discord client does not have a guild_id attribute.")
         sent_key = f"{guild_id}_{self.event_name}Sent"
-        # Send if it's the correct day and not already sent
-        if (weekday == self.reminder_day and not sent_section.get(sent_key, "").startswith(str(day))) or force:
-            if self.send_func:
-                if inspect.iscoroutinefunction(self.send_func):
-                    await self.send_func(self.discord_client)
-                else:
-                    self.send_func(self.discord_client)
+        # Check if already sent today
+        if sent_section.get(sent_key, "").startswith(str(day)):
+            return False
+        # Check if today is the correct reminder day
+        if weekday != self.reminder_day:
+            return False
+        # Check if current UTC hour is after the configured reminder time
+        hour = self.utc_time
+        if hour is not None:
+            now_utc = datetime.datetime.utcnow()
+            if now_utc.hour < hour:
+                return False
+        return True
+
+    async def send(self, day: datetime.date, config: configparser.ConfigParser, config_path: str = "guild_config.ini", force: bool=False) -> None:
+        """
+        Sends the reminder and tracks the sent status in the config. Assumes all checks are done by caller.
+        Args:
+            day (datetime.date): The current date.
+            config (configparser.ConfigParser): The loaded config object.
+            config_path (str): Path to the configuration file.
+        """
+        if "RemindersSent" not in config:
+            config["RemindersSent"] = {}
+        sent_section = config["RemindersSent"]
+        guild_id = getattr(self.discord_client, "guild_id", None)
+        if guild_id is None:
+            raise ValueError("Discord client does not have a guild_id attribute.")
+        sent_key = f"{guild_id}_{self.event_name}Sent"
+
+        # Get send channel for reminders from config
+        if "Channels" not in config:    
+            raise KeyError("No 'Channels' section in config.")
+        channels_cfg = config["Channels"]
+        if "reminders" not in channels_cfg: 
+            raise KeyError("No 'reminders' channel defined in config.")
+        ch = channels_cfg["reminders"]
+
+        if self.send_func:
+            if inspect.iscoroutinefunction(self.send_func):
+                await self.send_func(self.discord_client, ch)
             else:
-                raise ValueError(f"No send function defined for reminder '{self.event_name}'")
-            sent_section[sent_key] = str(day)
-            with open(config_path, "w") as configfile:
-                config.write(configfile)
+                self.send_func(self.discord_client, ch)
+        else:
+            raise ValueError(f"No send function defined for reminder '{self.event_name}'")
+        sent_section[sent_key] = str(day)
+        with open(config_path, "w") as configfile:
+            config.write(configfile)
 
 async def send_reminder_with_role(discord_client: DiscordAPI, message_body: str, role_name: str = "Member", channel: str = "announcements") -> None:
     """
@@ -95,7 +141,7 @@ async def send_reminder_with_role(discord_client: DiscordAPI, message_body: str,
     message = f"{role_mention} {message_body}"
     await discord_client.post_message(channel, message)
 
-async def send_hydra_reminder(discord_client: DiscordAPI) -> None:
+async def send_hydra_reminder(discord_client: DiscordAPI, channel: str) -> None:
     """
     Sends a reminder message to the announcement channel that there is less than 24 hours left to do Hydra.
     Args:
@@ -106,9 +152,9 @@ async def send_hydra_reminder(discord_client: DiscordAPI) -> None:
         "There are less than 24 hours left to do your Hydra keys!\n"
         "Don't forget to hit the boss and help the clan!"
     )
-    await send_reminder_with_role(discord_client, message_body)
+    await send_reminder_with_role(discord_client, message_body, channel=channel)
 
-async def send_chimera_reminder(discord_client: DiscordAPI) -> None:
+async def send_chimera_reminder(discord_client: DiscordAPI, channel: str) -> None:
     """
     Sends a reminder message to the announcement channel that there is less than 24 hours left to do Chimera.
     Args:
@@ -119,7 +165,7 @@ async def send_chimera_reminder(discord_client: DiscordAPI) -> None:
         "There are less than 24 hours left to do your Chimera attempts!\n"
         "Make sure to participate and help the clan!"
     )
-    await send_reminder_with_role(discord_client, message_body)
+    await send_reminder_with_role(discord_client, message_body, channel=channel)
 
 def initialize_reminders(config_path: str = "guild_config.ini", discord_client: DiscordAPI = None) -> List[Reminder]:
     """
@@ -164,7 +210,8 @@ async def daily_callback_template(day: datetime.date, reminders: List[Reminder],
         for reminder in reminders:
             reminder.clear(config, config_path)
     for reminder in reminders:
-        await reminder.send(day, config, config_path)
+        if reminder.should_send(day, config, config_path):
+            await reminder.send(day, config, config_path)
 
 async def on_clock(callback, sent_flags: dict, *args, **kwargs) -> None:
     """
