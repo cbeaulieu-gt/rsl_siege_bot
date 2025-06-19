@@ -126,6 +126,28 @@ class DiscordAPI:
         except Exception as e:
             print(f"Failed to send DM to {member.name}: {e}")
 
+    async def get_role_id(self, role_name: str) -> int:
+        """
+        Retrieves the ID of a role in the guild by its name.
+
+        Args:
+            role_name (str): The name of the role to search for.
+
+        Returns:
+            int: The ID of the role if found.
+
+        Raises:
+            ValueError: If the role is not found in the guild.
+        """
+        await self.wait_until_ready()
+        guild = discord.utils.get(self.bot.guilds, id=int(self.guild_id))
+        if not guild:
+            raise ValueError(f"Guild with ID {self.guild_id} not found.")
+        role = discord.utils.get(guild.roles, name=role_name)
+        if not role:
+            raise ValueError(f"Role '{role_name}' not found in guild '{self.guild_id}'.")
+        return role.id
+
 
 async def initialize_discord_client(guild_name, bot_token):
     guild_id = get_guild_id(guild_name)

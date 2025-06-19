@@ -150,3 +150,20 @@ def get_guild_id(guild_name):
     else:
         raise ValueError(f"Guild name '{guild_name}' not found in configuration.")
 
+
+class DiscordUtils:
+    @classmethod
+    def get_bot_token(cls) -> str:
+        """
+        Retrieves the Discord bot token from the RAID_BOT_TOKEN environment variable.
+        Returns:
+            str: The bot token.
+        Raises:
+            EnvironmentError: If the environment variable is not set.
+        """
+        import os
+        bot_token = os.environ.get("RAID_BOT_TOKEN")
+        if not bot_token:
+            raise EnvironmentError("RAID_BOT_TOKEN environment variable is not set.")
+        return bot_token
+

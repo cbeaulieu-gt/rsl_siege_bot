@@ -7,6 +7,9 @@ and member management.
 import asyncio
 from typing import Optional
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import click
 
 from siege.siege import (
@@ -135,6 +138,34 @@ def assignments() -> None:
     except Exception as e:
         click.echo(f"Error reading assignments: {e}", err=True)
         raise click.Abort()
+
+
+@cli.command("run_reminders")
+@click.option(
+    '--guild',
+    default=DEFAULT_GUILD,
+    help='The guild name to use for running commands.'
+)
+def run_reminders(guild) -> None:
+    """
+    Initializes the reminder set and starts the daily reminder loop.
+    """
+    from clan.clan import run_reminders_loop
+    run_reminders_loop(guild)
+
+
+@cli.command("send_reminders")
+@click.option(
+    '--guild',
+    default=DEFAULT_GUILD,
+    help='The guild name to use for running commands.'
+)
+def send_reminders(guild) -> None:
+    """
+    Immediately sends all reminders for today and exits.
+    """
+    from clan.clan import send_reminders_once
+    send_reminders_once(guild)
 
 
 def main() -> None:

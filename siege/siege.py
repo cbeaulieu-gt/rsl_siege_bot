@@ -4,9 +4,7 @@ import os.path
 from typing import Optional
 
 from discord_api.discordClient import DiscordAPI, initialize_discord_client
-from discord_api.discordClientUtils import find_discord_member, format_assignment_table
-
-from config import *
+from discord_api.discordClientUtils import find_discord_member, DiscordUtils
 from excel import (
     SiegeExcelSheets,
     export_siege_sheet,
@@ -34,7 +32,8 @@ async def main_function(guild_name: str, send_dm: bool, post_message: bool) -> N
     Returns:
         None
     """
-    discord_client = await initialize_discord_client(guild_name, BOTTOKEN)
+    bot_token = DiscordUtils.get_bot_token()
+    discord_client = await initialize_discord_client(guild_name, bot_token)
 
     # Load the most recent siege files
     siege_planner = AssignmentPlanner(root)
@@ -89,8 +88,8 @@ async def main_function(guild_name: str, send_dm: bool, post_message: bool) -> N
     await send_all()
 
 async def fetch_channel_members_function(guild_name):
-    bot_token = BOTTOKEN
-    discord_client = initialize_discord_client(guild_name, BOTTOKEN)
+    bot_token = DiscordUtils.get_bot_token()
+    discord_client = await initialize_discord_client(guild_name, bot_token)
 
     members = await discord_client.get_guild_members()
 
