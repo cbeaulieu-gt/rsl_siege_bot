@@ -148,6 +148,59 @@ class DiscordAPI:
             raise ValueError(f"Role '{role_name}' not found in guild '{self.guild_id}'.")
         return role.id
 
+    async def add_role(self, member: discord.Member, role_name: str) -> None:
+        """
+        Adds a role to a member in the guild.
+
+        Args:
+            member (discord.Member): The member to add the role to.
+            role_name (str): The name of the role to add.
+
+        Raises:
+            ValueError: If the role is not found in the guild.
+        """
+        await self.wait_until_ready()
+        guild = discord.utils.get(self.bot.guilds, id=int(self.guild_id))
+        if not guild:
+            raise ValueError(f"Guild with ID {self.guild_id} not found.")
+        role = discord.utils.get(guild.roles, name=role_name)
+        if not role:
+            raise ValueError(f"Role '{role_name}' not found in guild '{self.guild_id}'.")
+        await member.add_roles(role)
+
+    async def has_role(self, member: discord.Member, role_name: str) -> bool:
+        """
+        Checks if a member has a specific role.
+
+        Args:
+            member (discord.Member): The member to check.
+            role_name (str): The name of the role to check for.
+
+        Returns:
+            bool: True if the member has the role, False otherwise.
+        """
+        return any(role.name == role_name for role in member.roles)
+
+    async def remove_role(self, member: discord.Member, role_name: str) -> None:
+        """
+        Removes a role from a member in the guild.
+
+        Args:
+            member (discord.Member): The member to remove the role from.
+            role_name (str): The name of the role to remove.
+
+        Raises:
+            ValueError: If the role is not found in the guild.
+        """
+        await self.wait_until_ready()
+        guild = discord.utils.get(self.bot.guilds, id=int(self.guild_id))
+        if not guild:
+            raise ValueError(f"Guild with ID {self.guild_id} not found.")
+        role = discord.utils.get(guild.roles, name=role_name)
+        if not role:
+            raise ValueError(f"Role '{role_name}' not found in guild '{self.guild_id}'.")
+        await member.remove_roles(role)
+
 
 async def initialize_discord_client(guild_name, bot_token):
     guild_id = get_guild_id(guild_name)

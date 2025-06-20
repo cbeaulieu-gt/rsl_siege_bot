@@ -13,7 +13,7 @@ load_dotenv()
 import click
 
 from siege.siege import (
-    main_function,
+    run_siege_assignments,
     fetch_channel_members_function,
     print_assignments as siege_print_assignments,
 )
@@ -61,7 +61,7 @@ def run_siege(guild: str, send_dm: bool, post_message: bool) -> None:
         post_message: Whether to post assignment images and messages to channels.
     """
     try:
-        asyncio.run(main_function(guild, send_dm, post_message))
+        asyncio.run(run_siege_assignments(guild, send_dm, post_message))
     except KeyboardInterrupt:
         click.echo("Operation cancelled by user.", err=True)
     except Exception as e:

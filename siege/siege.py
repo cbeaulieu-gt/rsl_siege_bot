@@ -1,4 +1,5 @@
 import asyncio
+import configparser
 import os
 import os.path
 from typing import Optional
@@ -21,7 +22,7 @@ from .siege_utils import build_changeset, load_recent_siege_files
 root = "E:\\My Files\\Games\\Raid Shadow Legends\\siege\\"
 
 
-async def main_function(guild_name: str, send_dm: bool, post_message: bool) -> None:
+async def run_siege_assignments(guild_name: str, send_dm: bool, post_message: bool) -> None:
     """
     Main function to process siege assignments, post images/messages, and optionally send DMs.
 
@@ -83,8 +84,18 @@ async def main_function(guild_name: str, send_dm: bool, post_message: bool) -> N
     new_assignments = dict(extract_positions_from_excel(siege_planner.current_file_path))
     unchanged_assignments = get_unchanged_positions(old_assignments, new_assignments)
 
+    # Load config for role names
+    config = configparser.ConfigParser()
+    config.read('guild_config.ini')
+    roles_section = config['Roles'] if 'Roles' in config else {}
+    day1_role = roles_section.get('SiegeDay1Attacker', 'Siege Day 1')
+    day2_role = roles_section.get('SiegeDay2Attacker', 'Siege Day 2')
     # Map Discord members by nickname to changed assignments and print
-    send_all = send_siege_assignments(discord_client, changed_assignments, unchanged_assignments, siege_planner.most_recent_file.date, send_dm, members_set)
+    send_all = send_siege_assignments(
+        discord_client, changed_assignments, unchanged_assignments,
+        siege_planner.most_recent_file.date, send_dm, members_set,
+        day1_role=day1_role, day2_role=day2_role
+    )
     await send_all()
 
 async def fetch_channel_members_function(guild_name):
@@ -131,7 +142,9 @@ def send_siege_assignments(
     unchanged_assignments,
     siege_date,
     send_dm: bool = False,
-    members_set=None
+    members_set=None,
+    day1_role: str = 'Siege Day 1',
+    day2_role: str = 'Siege Day 2',
 ):
     """
     Sends DMs to Discord members with all their siege assignment changes in a single message and prints the changes.
@@ -157,6 +170,10 @@ def send_siege_assignments(
             if member_info and getattr(member_info, 'siege_assignment', None):
                 set_reserve = member_info.siege_assignment.set_reserve
                 attack_day = member_info.siege_assignment.attack_day
+            await update_siege_assignment_roles(
+                discord_client, member_obj, attack_day, member_name,
+                day1_role=day1_role, day2_role=day2_role
+            )
             if member_obj:
                 summary = format_assignment_summary(assignments, set_reserve, attack_day)
                 print(
@@ -185,6 +202,29 @@ def send_siege_assignments(
                 for unchanged_pos in assignments['unchanged']:
                     print(f"Member: {member_name} | Unchanged: {unchanged_pos} (No Discord match)")
     return send_all
+
+async def update_siege_assignment_roles(discord_client, member_obj, attack_day, member_name=None, day1_role='Siege Day 1', day2_role='Siege Day 2'):
+    """
+    Assigns the correct Siege Day role to the member and removes the other day role if present, using config roles.
+
+    Args:
+        discord_client: The DiscordAPI client instance.
+        member_obj: The discord.Member object to update.
+        attack_day (int): The member's attack day (1 or 2).
+        member_name (str, optional): The member's name for logging.
+        day1_role (str, optional): The role name for Day 1 attackers.
+        day2_role (str, optional): The role name for Day 2 attackers.
+    """
+    if member_obj and attack_day in (1, 2):
+        day_role = day1_role if attack_day == 1 else day2_role
+        other_role = day2_role if attack_day == 1 else day1_role
+        try:
+            if not await discord_client.has_role(member_obj, day_role):
+                await discord_client.add_role(member_obj, day_role)
+            if await discord_client.has_role(member_obj, other_role):
+                await discord_client.remove_role(member_obj, other_role)
+        except Exception as e:
+            print(f"Failed to update roles for {member_name or getattr(member_obj, 'name', None)}: {e}")
 
 def send_siege_assignment_dm(discord_client, member_obj, assignments, siege_date, set_reserve=None, attack_day=None):
     """
