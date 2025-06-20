@@ -6,7 +6,7 @@ from discord_api.discordClientUtils import get_guild_id
 
 class DiscordAPI:
     def __init__(self, guild_id, bot_token):
-        self.guild_id = guild_id
+        self._guild_id = guild_id
         intents = discord.Intents.default()
         intents.messages = True
         intents.guilds = True
@@ -147,6 +147,13 @@ class DiscordAPI:
         if not role:
             raise ValueError(f"Role '{role_name}' not found in guild '{self.guild_id}'.")
         return role.id
+
+    @property
+    def guild_id(self):
+        """
+        Returns the guild ID as a string.
+        """
+        return str(self._guild_id)
 
 
 async def initialize_discord_client(guild_name, bot_token):
