@@ -46,7 +46,6 @@ def send_reminders_once(guild_name: str):
         bot_token = DiscordUtils.get_bot_token()
         discord_client = await initialize_discord_client(guild_name, bot_token=bot_token)
         reminders = initialize_reminders(config_path="guild_config.ini", discord_client=discord_client)
-        config = get_config_parser()
         for reminder in reminders:
-            await reminder.send(datetime.date.today(), config, "guild_config.ini", force=True)
+            await reminder.send(datetime.date.today())
     asyncio.run(_main())
