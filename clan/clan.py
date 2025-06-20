@@ -31,8 +31,7 @@ def run_reminders_loop(guild_name: str):
         await on_clock(
             daily_callback_template,
             sent_flags,
-            reminders,
-            "guild_config.ini"
+            reminders
         )
        
     asyncio.run(_main())
