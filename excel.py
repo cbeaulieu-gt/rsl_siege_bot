@@ -14,7 +14,7 @@ sheet = namedtuple("Sheet", ["name", "cell_range"])
 class SiegeExcelSheets:
 
     DEFAULT_MEMBER_COUNT = 30
-    NUM_ASSIGNMENTS_GROUPS = 39
+    NUM_ASSIGNMENTS_GROUPS = 41
     ASSIGNMENT_SHEET_OFFSET = 3  # Offset for the assignments sheet
     
     @classmethod

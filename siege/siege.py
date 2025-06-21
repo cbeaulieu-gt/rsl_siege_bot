@@ -170,14 +170,10 @@ def send_siege_assignments(
             if member_info and getattr(member_info, 'siege_assignment', None):
                 set_reserve = member_info.siege_assignment.set_reserve
                 attack_day = member_info.siege_assignment.attack_day
-            await update_siege_assignment_roles(
-                discord_client, member_obj, attack_day, member_name,
-                day1_role=day1_role, day2_role=day2_role
-            )
             if member_obj:
                 summary = format_assignment_summary(assignments, set_reserve, attack_day)
                 print(
-                    f"Discord: {getattr(member_obj, 'name', '')} (Nick: {getattr(member_obj, 'nick', '')}) | Member: {member_name}\n{summary}"
+                    f"Discord: {getattr(member_obj, 'name', '')} (Nick: {getattr(member_obj, 'nick', '')}) | Member: {member_name}\n{summary} | Attack Day: {attack_day or 'Unknown'} | Reserve: {set_reserve or 'Unknown'}"
                 )
                 if send_dm:
                     try:
@@ -189,6 +185,10 @@ def send_siege_assignments(
                             siege_date,
                             set_reserve=set_reserve,
                             attack_day=attack_day
+                        )
+                        await update_siege_assignment_roles(
+                            discord_client, member_obj, attack_day, member_name,
+                            day1_role=day1_role, day2_role=day2_role
                         )
                     except Exception as e:
                         print(f"Failed to DM {member_name}: {e}")
