@@ -69,15 +69,18 @@ class Reminder:
         # Check if already sent today
         last_sent = self.sent_store.get(guild_id, self.event_name)
         if last_sent == str(day):
+            print(f"[Reminder: {self.event_name}] Not sending: already sent today for guild {guild_id}.")
             return False
         # Check if today is the correct reminder day
         if weekday != self.reminder_day:
+            print(f"[Reminder: {self.event_name}] Not sending: today (weekday={weekday}) is not the configured reminder day ({self.reminder_day}) for guild {guild_id}.")
             return False
         # Check if current UTC hour is after the configured reminder time
         hour = self.utc_time
         if hour is not None:
-            now_utc = datetime.datetime.utcnow()
+            now_utc = datetime.datetime.now(datetime.timezone.utc)
             if now_utc.hour < hour:
+                print(f"[Reminder: {self.event_name}] Not sending: current UTC hour ({now_utc.hour}) is before configured reminder hour ({hour}) for guild {guild_id}.")
                 return False
         return True
 
@@ -109,6 +112,7 @@ async def send_reminder_with_role(discord_client: DiscordAPI, message_body: str,
     role_id = await discord_client.get_role_id(role_name)
     role_mention = f"<@&{role_id}>"
     message = f"{role_mention} {message_body}"
+    print(f"Sending reminder to channel '{channel}': {message}")
     await discord_client.post_message(channel, message)
 
 async def send_hydra_reminder(discord_client: DiscordAPI, channel: str) -> None:
