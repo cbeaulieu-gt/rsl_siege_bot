@@ -184,13 +184,12 @@ async def daily_callback_template(day: datetime.date, reminders: List[Reminder])
         if reminder.should_send(day):
             await reminder.send(day)
 
-async def on_clock(callback, sent_flags: dict, *args, **kwargs) -> None:
+async def on_clock(callback, *args, **kwargs) -> None:
     """
     Periodically checks the current date and invokes the callback at the start of each new day.
-    Ensures the callback is only invoked once per day by tracking sent_flags.
+    Ensures the callback is only invoked once per day by tracking sent flags in reminders.
     Args:
-        callback (callable): The function to invoke at the start of the day. Must accept 'day' as its first argument.
-        sent_flags (dict): A dictionary to track if the reminder was sent for the current date.
+        callback (callable): The function to invoke at the start of the day. Must accept 'day' and any additional arguments.
         *args: Additional positional arguments to pass to the callback.
         **kwargs: Additional keyword arguments to pass to the callback.
     """
@@ -199,17 +198,9 @@ async def on_clock(callback, sent_flags: dict, *args, **kwargs) -> None:
         print(f"Checking if it's time to send reminders at {datetime.datetime.now()}")
         now = datetime.datetime.now()
         today = now.date()
-        key = f"{callback.__name__}_{today}"
-        if not sent_flags.get(key, False):
-            if inspect.iscoroutinefunction(callback):
-                await callback(today, *args, **kwargs)
-            else:
-                callback(today, *args, **kwargs)
-            sent_flags[key] = True
-        # Reset sent_flags for previous days to avoid memory growth
-        for k in list(sent_flags.keys()):
-            if str(today) not in k:
-                del sent_flags[k]
+        if inspect.iscoroutinefunction(callback):
+            await callback(today, *args, **kwargs)
+        else:
+            callback(today, *args, **kwargs)
         # Sleep for 1 hour before checking again
         await asyncio.sleep(3600)
-
