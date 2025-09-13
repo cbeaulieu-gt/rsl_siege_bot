@@ -176,8 +176,8 @@ class Position:
         """
         if building not in self.VALID_BUILDINGS:
             raise ValueError(f"Invalid building: {building}. Must be one of {self.VALID_BUILDINGS}.")
-        if group is not None and not (1 <= group <= 6):
-            raise ValueError(f"Invalid group: {group}. Must be in the range 1-6 if specified.")
+        if group is not None and not (1 <= group <= 8):
+            raise ValueError(f"Invalid group: {group}. Must be in the range 1-8 if specified.")
         if not (1 <= position <= 3):
             raise ValueError(f"Invalid position: {position}. Must be in the range 1-3.")
         if building_number is not None and not (1 <= building_number <= 18):

@@ -13,8 +13,8 @@ siege_file = namedtuple("SiegeFile", ["file_name", "date"])
 sheet = namedtuple("Sheet", ["name", "cell_range"])
 class SiegeExcelSheets:
 
-    DEFAULT_MEMBER_COUNT = 30
-    NUM_ASSIGNMENTS_GROUPS = 39
+    DEFAULT_MEMBER_COUNT = 29
+    NUM_ASSIGNMENTS_GROUPS = 46
     ASSIGNMENT_SHEET_OFFSET = 3  # Offset for the assignments sheet
     
     @classmethod
@@ -26,9 +26,9 @@ class SiegeExcelSheets:
         cls.assignment_sheet = sheet("Assignments", f"A1:E{count}")
         cls.reserves_sheet = sheet("Reserves", f"A1:D{count}")
 
-    members_sheet = sheet("Members", f"A1:E{DEFAULT_MEMBER_COUNT}")
+    members_sheet = sheet("Members", f"A1:E{DEFAULT_MEMBER_COUNT + 1}") # Add 1 for Reserve Member
     assignment_sheet = sheet("Assignments", f"A1:E{NUM_ASSIGNMENTS_GROUPS + ASSIGNMENT_SHEET_OFFSET}")
-    reserves_sheet = sheet("Reserves", f"A1:D{DEFAULT_MEMBER_COUNT}")
+    reserves_sheet = sheet("Reserves", f"A1:D{DEFAULT_MEMBER_COUNT + 1}") # Start from A2 to skip header
 
 def compare_sheets_between_workbooks(file_path1, file_path2, sheet_name, cell_range):
     """
