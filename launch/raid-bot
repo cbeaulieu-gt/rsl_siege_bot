@@ -1,0 +1,15 @@
+/var/log/raid/*
+{
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 640 main main
+    sharedscripts
+    postrotate
+        # Tell systemd to reopen logs after rotation
+        systemctl kill -s SIGUSR1 'raid-bot@*' || true
+    endscript
+}

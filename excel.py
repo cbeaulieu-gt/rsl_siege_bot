@@ -14,7 +14,7 @@ sheet = namedtuple("Sheet", ["name", "cell_range"])
 class SiegeExcelSheets:
 
     DEFAULT_MEMBER_COUNT = 30
-    NUM_ASSIGNMENTS_GROUPS = 39
+    NUM_ASSIGNMENTS_GROUPS = 46
     ASSIGNMENT_SHEET_OFFSET = 3  # Offset for the assignments sheet
     
     @classmethod
@@ -22,13 +22,12 @@ class SiegeExcelSheets:
         """
         Sets the number of members in the Members sheet.
         """
-        cls.members_sheet = sheet("Members", f"A1:E{count}")
-        cls.assignment_sheet = sheet("Assignments", f"A1:E{count}")
-        cls.reserves_sheet = sheet("Reserves", f"A1:D{count}")
+        cls.members_sheet = sheet("Members", f"A1:E{count + 1}")
+        cls.reserves_sheet = sheet("Reserves", f"A1:D{count + 1}")
 
-    members_sheet = sheet("Members", f"A1:E{DEFAULT_MEMBER_COUNT}")
+    members_sheet = sheet("Members", f"A1:E{DEFAULT_MEMBER_COUNT + 1}") # Add 1 for Reserve Member
     assignment_sheet = sheet("Assignments", f"A1:E{NUM_ASSIGNMENTS_GROUPS + ASSIGNMENT_SHEET_OFFSET}")
-    reserves_sheet = sheet("Reserves", f"A1:D{DEFAULT_MEMBER_COUNT}")
+    reserves_sheet = sheet("Reserves", f"A1:D{DEFAULT_MEMBER_COUNT + 1}") # Start from A2 to skip header
 
 def compare_sheets_between_workbooks(file_path1, file_path2, sheet_name, cell_range):
     """
@@ -488,3 +487,41 @@ def extract_members_from_members_sheet(root: str, file_name: str) -> List[Member
         app.quit()
     
     return members
+
+def extract_member_count_from_assignments_sheet(root: str, file_name: str) -> Optional[int]:
+    """
+    Extracts the number of members from cell Q4 on the Assignments sheet.
+
+    Args:
+        root (str): Root directory path containing siege files.
+        file_name (str): The name of the Excel file.
+
+    Returns:
+        Optional[int]: The number of members, or None if not found or invalid.
+    """
+    file_path = os.path.join(root, file_name)
+    app = xw.App(visible=False)
+    wb = app.books.open(file_path)
+    
+    try:
+        sheet = wb.sheets['Assignments']
+        member_count_cell = sheet.range('Q4').value
+        
+        if member_count_cell is None:
+            logger.warning(f"Cell Q4 is empty in assignments sheet of '{file_name}'.")
+            return None
+            
+        try:
+            member_count = int(float(member_count_cell))  # Handle potential float conversion
+            if member_count <= 0:
+                logger.warning(f"Invalid member count {member_count} in cell Q4 of '{file_name}'.")
+                return None
+            logger.info(f"Extracted member count: {member_count} from assignments sheet in '{file_name}'.")
+            return member_count
+        except (ValueError, TypeError):
+            logger.warning(f"Could not parse member count '{member_count_cell}' from cell Q4 in '{file_name}'.")
+            return None
+            
+    finally:
+        wb.close()
+        app.quit()

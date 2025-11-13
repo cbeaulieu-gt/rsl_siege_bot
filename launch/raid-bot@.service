@@ -1,0 +1,23 @@
+[Unit]
+Description=raid-bot-%i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStartPre=/bin/sleep 10
+ExecStart=/home/main/raid/launch/raid-bot-%i.sh --no-daemon
+Restart=always
+User=main
+WorkingDirectory=/home/main/raid/launch
+
+Environment="PATH=/home/main/raid/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+
+StandardOutput=append:/var/log/raid/raid-bot-%i.log
+StandardError=append:/var/log/raid/raid-bot-%i.err
+
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target

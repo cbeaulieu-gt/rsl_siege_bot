@@ -9,6 +9,7 @@ from excel import (
     SiegeExcelSheets,
     export_siege_sheet,
     compare_assignment_changes,
+    extract_member_count_from_assignments_sheet,
     extract_members_from_members_sheet,
     extract_members_from_reserves_sheet,
     extract_positions_from_excel,
@@ -38,6 +39,7 @@ async def main_function(guild_name: str, send_dm: bool, post_message: bool) -> N
     # Load the most recent siege files
     siege_planner = AssignmentPlanner(root)
     siege_planner.most_recent_file, siege_planner.second_most_recent_file = load_recent_siege_files(root)
+    SiegeExcelSheets.set_member_count(extract_member_count_from_assignments_sheet(root, siege_planner.most_recent_file.file_name))
 
     assignment_sheet_image = export_siege_sheet(root, SiegeExcelSheets.assignment_sheet, siege_planner.most_recent_file.file_name, root)
     reserves_sheet_image = export_siege_sheet(root, SiegeExcelSheets.reserves_sheet, siege_planner.most_recent_file.file_name, root)
