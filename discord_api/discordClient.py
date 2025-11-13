@@ -73,7 +73,6 @@ class DiscordAPI:
         if not channel:
             raise ValueError(f"Channel with ID {channel_id} not found.")
 
-        return await channel.send(file=discord.File(image_path))
 
     async def get_guild_members(self):
         await self.wait_until_ready()
@@ -121,8 +120,8 @@ class DiscordAPI:
         """
         try:
             await member.send(message)
-        except discord.Forbidden:
-            print(f"Cannot DM {member["disc"]}: Forbidden.")
+        # except discord.Forbidden:
+        #     print(f"Cannot DM {member["disc"]}: Forbidden.")
         except Exception as e:
             print(f"Failed to send DM to {member.name}: {e}")
 
