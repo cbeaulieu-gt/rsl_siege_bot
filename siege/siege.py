@@ -22,7 +22,7 @@ from .siege_utils import build_changeset, load_recent_siege_files
 root = "E:\\My Files\\Games\\Raid Shadow Legends\\siege\\"
 
 
-async def main_function(guild_name: str, send_dm: bool, post_message: bool) -> None:
+async def   main_function(guild_name: str, send_dm: bool, post_message: bool, force_accept: bool = False) -> None:
     """
     Main function to process siege assignments, post images/messages, and optionally send DMs.
 
@@ -30,6 +30,7 @@ async def main_function(guild_name: str, send_dm: bool, post_message: bool) -> N
         guild_name (str): The name of the guild.
         send_dm (bool): Whether to send DMs to members about assignment changes.
         post_message (bool): Whether to post assignment images and messages to Discord channels.
+        force_accept (bool): If True, force accept the two most recent siege files without confirmation. Does not ovveride file validity.
     Returns:
         None
     """
@@ -38,7 +39,7 @@ async def main_function(guild_name: str, send_dm: bool, post_message: bool) -> N
 
     # Load the most recent siege files
     siege_planner = AssignmentPlanner(root)
-    siege_planner.most_recent_file, siege_planner.second_most_recent_file = load_recent_siege_files(root)
+    siege_planner.most_recent_file, siege_planner.second_most_recent_file = load_recent_siege_files(root, force_accept)
     SiegeExcelSheets.set_member_count(extract_member_count_from_assignments_sheet(root, siege_planner.most_recent_file.file_name))
 
     assignment_sheet_image = export_siege_sheet(root, SiegeExcelSheets.assignment_sheet, siege_planner.most_recent_file.file_name, root)

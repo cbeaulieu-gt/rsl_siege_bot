@@ -48,7 +48,13 @@ def cli() -> None:
     default=False,
     help='Post assignment images and messages to Discord channels.'
 )
-def run_siege(guild: str, send_dm: bool, post_message: bool) -> None:
+@click.option(
+    '--force-accept',
+    is_flag=True,
+    default=False,
+    help='Force accept the two most recent siege files without confirmation.'
+)
+def run_siege(guild: str, send_dm: bool, post_message: bool, force_accept: bool) -> None:
     """
     Process siege assignments and optionally send notifications.
     
@@ -61,7 +67,7 @@ def run_siege(guild: str, send_dm: bool, post_message: bool) -> None:
         post_message: Whether to post assignment images and messages to channels.
     """
     try:
-        asyncio.run(main_function(guild, send_dm, post_message))
+        asyncio.run(main_function(guild, send_dm, post_message, force_accept))
     except KeyboardInterrupt:
         click.echo("Operation cancelled by user.", err=True)
     except Exception as e:
