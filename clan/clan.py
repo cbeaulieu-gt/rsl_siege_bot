@@ -17,18 +17,21 @@ def get_config_parser(config_path: str = "guild_config.ini") -> configparser.Con
     config.read(config_path)
     return config
 
-def run_reminders_loop(guild_name: str):
+def run_reminders_loop(guild_name: str, send_heartbeart):
     """
     Initializes the reminder set and starts the daily reminder loop for the specified guild.
+    :param send_heartbeart: Tells the bot to periodically send a heartbeat to a channel called "heartbeat".
     """
     async def _main():
         bot_token = DiscordUtils.get_bot_token()
         discord_client = await initialize_discord_client(guild_name, bot_token=bot_token)
         reminders = initialize_reminders(config_path="guild_config.ini", discord_client=discord_client)
+        heartbeat_client = discord_client if send_heartbeart else None
 
         print(f"Reminder loop started for guild '{guild_name}'. Reminders will be sent automatically each day.")
         await on_clock(
             daily_callback_template,
+            heartbeat_client,
             reminders
         )
        

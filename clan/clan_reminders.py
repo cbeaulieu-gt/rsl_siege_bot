@@ -1,11 +1,15 @@
 from discord_api.discordClient import DiscordAPI
 import datetime
-import threading
 import configparser
 from typing import List
 import asyncio
 import inspect
 from clan.reminder_sent_store import ReminderSentStore
+import signal
+from logger import get_logger
+
+# Module logger
+logger = get_logger(__name__)
 
 class Reminder:
     def __init__(self, event_name: str, reminder_day: int, discord_client: DiscordAPI = None, send_func=None, utc_time: int = None, sent_store: ReminderSentStore = None):
@@ -184,23 +188,107 @@ async def daily_callback_template(day: datetime.date, reminders: List[Reminder])
         if reminder.should_send(day):
             await reminder.send(day)
 
-async def on_clock(callback, *args, **kwargs) -> None:
+
+async def heartbeat(discord_client: DiscordAPI, stop_event: asyncio.Event, channel: str = "heartbeat") -> None:
+    """
+    Background heartbeat task that posts a short heartbeat message once a minute to the given channel.
+    The task runs until `stop_event` is set. Exceptions during sending are logged and the loop continues.
+    Args:
+        discord_client (DiscordAPI): Discord API client used to post messages.
+        stop_event (asyncio.Event): Event used to request task stop/cleanup.
+        channel (str): Channel name to post heartbeat messages to. Defaults to 'heartbeat'.
+    """
+    try:
+        while not stop_event.is_set():
+            try:
+                timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                message = f":heartbeat: heartbeat at {timestamp}"
+                logger.debug("Sending heartbeat to %s: %s", channel, message)
+                await discord_client.post_message(channel, message)
+            except Exception:
+                logger.exception("Failed to send heartbeat message to channel '%s'", channel)
+            # Wait up to 60 seconds, but return early if stop is requested
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=60)
+            except asyncio.TimeoutError:
+                # timeout expired -> loop again and send next heartbeat
+                continue
+    finally:
+        logger.info("heartbeat task exiting")
+
+
+async def on_clock(callback, heartbeat_client: DiscordAPI = None,*args, **kwargs) -> None:
     """
     Periodically checks the current date and invokes the callback at the start of each new day.
-    Ensures the callback is only invoked once per day by tracking sent flags in reminders.
+
+    This implementation is safe to run under a Linux daemon (or systemd service):
+    - Registers signal handlers for SIGINT, SIGTERM and SIGHUP to perform a graceful shutdown.
+    - Runs synchronous callbacks in an executor so the event loop is not blocked.
+    - Sleeps in an interruptible way so shutdown is responsive.
     Args:
         callback (callable): The function to invoke at the start of the day. Must accept 'day' and any additional arguments.
         *args: Additional positional arguments to pass to the callback.
+        heartbeat_client (DiscordAPI): Optional Discord client to use for running the heartbeat background task.
         **kwargs: Additional keyword arguments to pass to the callback.
     """
-    import inspect
-    while True:
-        print(f"Checking if it's time to send reminders at {datetime.datetime.now()}")
-        now = datetime.datetime.now()
-        today = now.date()
-        if inspect.iscoroutinefunction(callback):
-            await callback(today, *args, **kwargs)
-        else:
-            callback(today, *args, **kwargs)
-        # Sleep for 1 hour before checking again
-        await asyncio.sleep(3600)
+    loop = asyncio.get_running_loop()
+    stop_event = asyncio.Event()
+
+    def _request_stop() -> None:
+        logger.info("Shutdown signal received; requesting on_clock stop.")
+        # Use a no-arg callable with call_soon_threadsafe to avoid analyzer warnings
+        loop.call_soon_threadsafe(lambda: stop_event.set())
+
+    # Register unix signal handlers; ignore failures on platforms that do not support them
+    # Check if signal exists and if so add it to the list of signals to handle
+    sigs = [getattr(signal, sig) for sig in ("SIGTERM", "SIGINT", "SIGHUP") if hasattr(signal, sig)]
+
+    for sig in sigs:
+        try:
+            # Wrap the handler in a no-arg lambda to satisfy the expected signature
+            loop.add_signal_handler(sig, lambda _sig=sig: _request_stop())
+        except NotImplementedError:
+            # Some event loops / platforms (e.g., Windows or certain loops) may not support add_signal_handler
+            logger.debug("Signal handlers not supported for %s", sig)
+
+    # Start heartbeat background task if a client was provided
+    heartbeat_task = None
+    if heartbeat_client is not None:
+        logger.info( "Starting heartbeat task")
+        heartbeat_task = asyncio.create_task(heartbeat(heartbeat_client, stop_event))
+
+    try:
+        while not stop_event.is_set():
+            logger.info("Checking if it's time to send reminders at %s", datetime.datetime.now())
+            today = datetime.datetime.now().date()
+            try:
+                if inspect.iscoroutinefunction(callback):
+                    await callback(today, *args, **kwargs)
+                else:
+                    # Run blocking/sync callbacks in executor to avoid blocking the event loop.
+                    # Use a small nested function to capture args/kwargs for the executor callable
+                    def _sync_callback() -> None:
+                        callback(today, *args, **kwargs)
+
+                    await loop.run_in_executor(None, _sync_callback)
+            except asyncio.CancelledError:
+                # Preserve cancellation so shutdown proceeds cleanly
+                raise
+            except Exception:
+                logger.exception("Exception raised while executing on_clock callback")
+
+            # Wait up to 1 hour, but wake immediately if a stop is requested.
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=3600)
+            except asyncio.TimeoutError:
+                # timeout expired -> loop again
+                continue
+    finally:
+        logger.info("on_clock loop exiting gracefully")
+        # Cancel and await heartbeat task if it was started
+        if heartbeat_task is not None:
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
