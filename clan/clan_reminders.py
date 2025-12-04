@@ -189,14 +189,15 @@ async def daily_callback_template(day: datetime.date, reminders: List[Reminder])
             await reminder.send(day)
 
 
-async def heartbeat(discord_client: DiscordAPI, stop_event: asyncio.Event, channel: str = "heartbeat") -> None:
+async def heartbeat(discord_client: DiscordAPI, stop_event: asyncio.Event, channel: str = "heartbeat", interval: float = 1) -> None:
     """
-    Background heartbeat task that posts a short heartbeat message once a minute to the given channel.
+    Background heartbeat task that posts a short heartbeat message at the given interval (in minutes) to the specified channel.
     The task runs until `stop_event` is set. Exceptions during sending are logged and the loop continues.
     Args:
         discord_client (DiscordAPI): Discord API client used to post messages.
         stop_event (asyncio.Event): Event used to request task stop/cleanup.
         channel (str): Channel name to post heartbeat messages to. Defaults to 'heartbeat'.
+        interval (float): Interval in minutes between heartbeat messages. Defaults to 1.
     """
     try:
         while not stop_event.is_set():
@@ -207,28 +208,24 @@ async def heartbeat(discord_client: DiscordAPI, stop_event: asyncio.Event, chann
                 await discord_client.post_message(channel, message)
             except Exception:
                 logger.exception("Failed to send heartbeat message to channel '%s'", channel)
-            # Wait up to 60 seconds, but return early if stop is requested
+            # Wait up to 'interval' minutes, but return early if stop is requested
             try:
-                await asyncio.wait_for(stop_event.wait(), timeout=60)
+                await asyncio.wait_for(stop_event.wait(), timeout=interval * 60)
             except asyncio.TimeoutError:
-                # timeout expired -> loop again and send next heartbeat
                 continue
     finally:
         logger.info("heartbeat task exiting")
 
 
-async def on_clock(callback, heartbeat_client: DiscordAPI = None,*args, **kwargs) -> None:
+async def on_clock(callback, heartbeat_client: DiscordAPI = None, heartbeat_interval: float = 1,*args, **kwargs) -> None:
     """
     Periodically checks the current date and invokes the callback at the start of each new day.
-
-    This implementation is safe to run under a Linux daemon (or systemd service):
-    - Registers signal handlers for SIGINT, SIGTERM and SIGHUP to perform a graceful shutdown.
-    - Runs synchronous callbacks in an executor so the event loop is not blocked.
-    - Sleeps in an interruptible way so shutdown is responsive.
+    Optionally starts a heartbeat background task with the specified interval (in minutes).
     Args:
         callback (callable): The function to invoke at the start of the day. Must accept 'day' and any additional arguments.
-        *args: Additional positional arguments to pass to the callback.
         heartbeat_client (DiscordAPI): Optional Discord client to use for running the heartbeat background task.
+        heartbeat_interval (float): Interval in minutes between heartbeat messages. Defaults to 1.
+        *args: Additional positional arguments to pass to the callback.
         **kwargs: Additional keyword arguments to pass to the callback.
     """
     loop = asyncio.get_running_loop()
@@ -236,26 +233,19 @@ async def on_clock(callback, heartbeat_client: DiscordAPI = None,*args, **kwargs
 
     def _request_stop() -> None:
         logger.info("Shutdown signal received; requesting on_clock stop.")
-        # Use a no-arg callable with call_soon_threadsafe to avoid analyzer warnings
         loop.call_soon_threadsafe(lambda: stop_event.set())
 
-    # Register unix signal handlers; ignore failures on platforms that do not support them
-    # Check if signal exists and if so add it to the list of signals to handle
     sigs = [getattr(signal, sig) for sig in ("SIGTERM", "SIGINT", "SIGHUP") if hasattr(signal, sig)]
-
     for sig in sigs:
         try:
-            # Wrap the handler in a no-arg lambda to satisfy the expected signature
             loop.add_signal_handler(sig, lambda _sig=sig: _request_stop())
         except NotImplementedError:
-            # Some event loops / platforms (e.g., Windows or certain loops) may not support add_signal_handler
             logger.debug("Signal handlers not supported for %s", sig)
 
-    # Start heartbeat background task if a client was provided
     heartbeat_task = None
     if heartbeat_client is not None:
-        logger.info( "Starting heartbeat task")
-        heartbeat_task = asyncio.create_task(heartbeat(heartbeat_client, stop_event))
+        logger.info("Starting heartbeat task")
+        heartbeat_task = asyncio.create_task(heartbeat(heartbeat_client, stop_event, interval=heartbeat_interval))
 
     try:
         while not stop_event.is_set():
@@ -265,27 +255,19 @@ async def on_clock(callback, heartbeat_client: DiscordAPI = None,*args, **kwargs
                 if inspect.iscoroutinefunction(callback):
                     await callback(today, *args, **kwargs)
                 else:
-                    # Run blocking/sync callbacks in executor to avoid blocking the event loop.
-                    # Use a small nested function to capture args/kwargs for the executor callable
                     def _sync_callback() -> None:
                         callback(today, *args, **kwargs)
-
                     await loop.run_in_executor(None, _sync_callback)
             except asyncio.CancelledError:
-                # Preserve cancellation so shutdown proceeds cleanly
                 raise
             except Exception:
                 logger.exception("Exception raised while executing on_clock callback")
-
-            # Wait up to 1 hour, but wake immediately if a stop is requested.
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=3600)
             except asyncio.TimeoutError:
-                # timeout expired -> loop again
                 continue
     finally:
         logger.info("on_clock loop exiting gracefully")
-        # Cancel and await heartbeat task if it was started
         if heartbeat_task is not None:
             heartbeat_task.cancel()
             try:

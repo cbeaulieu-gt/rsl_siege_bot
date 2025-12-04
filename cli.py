@@ -153,18 +153,29 @@ def assignments() -> None:
     help='The guild name to use for running commands.'
 )
 @click.option(
-    '--send_heartbeat',
+    '--send-heartbeat',
     help='Tells the bot to periodically send a heartbeat to a channel called "heartbeat". Useful primarily for ensuring the'
          'bot is still alive and can communicate with the server.',
     is_flag=True,
     default=False,
 )
-def run_reminders(guild, send_heartbeat) -> None:
+@click.option(
+    '--heartbeat-interval',
+    default=1,
+    help='The interval in minutes between heartbeat messages.',
+    type=float,
+)
+def run_reminders(guild, send_heartbeat, heartbeat_interval) -> None:
     """
     Initializes the reminder set and starts the daily reminder loop.
+
+    Args:
+        guild: The Discord guild name to use.
+        send_heartbeat: Whether to send heartbeat messages.
+        heartbeat_interval: Interval in minutes between heartbeat messages.
     """
     from clan.clan import run_reminders_loop
-    run_reminders_loop(guild, send_heartbeat)
+    run_reminders_loop(guild, send_heartbeat, heartbeat_interval)
 
 
 @cli.command("send_reminders")
