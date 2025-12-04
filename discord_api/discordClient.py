@@ -122,7 +122,7 @@ class DiscordAPI:
         try:
             await member.send(message)
         except discord.Forbidden:
-            print(f"Cannot DM {member["disc"]}: Forbidden.")
+            print(f"Cannot DM {member.name}: Forbidden.")
         except Exception as e:
             print(f"Failed to send DM to {member.name}: {e}")
 

@@ -48,7 +48,13 @@ def cli() -> None:
     default=False,
     help='Post assignment images and messages to Discord channels.'
 )
-def run_siege(guild: str, send_dm: bool, post_message: bool) -> None:
+@click.option(
+    '--force-accept',
+    is_flag=True,
+    default=False,
+    help='Force accept the two most recent siege files without confirmation.'
+)
+def run_siege(guild: str, send_dm: bool, post_message: bool, force_accept: bool) -> None:
     """
     Process siege assignments and optionally send notifications.
     
@@ -61,7 +67,7 @@ def run_siege(guild: str, send_dm: bool, post_message: bool) -> None:
         post_message: Whether to post assignment images and messages to channels.
     """
     try:
-        asyncio.run(main_function(guild, send_dm, post_message))
+        asyncio.run(main_function(guild, send_dm, post_message, force_accept))
     except KeyboardInterrupt:
         click.echo("Operation cancelled by user.", err=True)
     except Exception as e:
@@ -146,12 +152,30 @@ def assignments() -> None:
     default=DEFAULT_GUILD,
     help='The guild name to use for running commands.'
 )
-def run_reminders(guild) -> None:
+@click.option(
+    '--send-heartbeat',
+    help='Tells the bot to periodically send a heartbeat to a channel called "heartbeat". Useful primarily for ensuring the'
+         'bot is still alive and can communicate with the server.',
+    is_flag=True,
+    default=False,
+)
+@click.option(
+    '--heartbeat-interval',
+    default=1,
+    help='The interval in minutes between heartbeat messages.',
+    type=float,
+)
+def run_reminders(guild, send_heartbeat, heartbeat_interval) -> None:
     """
     Initializes the reminder set and starts the daily reminder loop.
+
+    Args:
+        guild: The Discord guild name to use.
+        send_heartbeat: Whether to send heartbeat messages.
+        heartbeat_interval: Interval in minutes between heartbeat messages.
     """
     from clan.clan import run_reminders_loop
-    run_reminders_loop(guild)
+    run_reminders_loop(guild, send_heartbeat, heartbeat_interval)
 
 
 @cli.command("send_reminders")

@@ -61,6 +61,11 @@ def load_recent_siege_files(root, skip_confirmation=False) -> tuple[siege_file, 
     print(f"Most recent file (upcoming siege): {most_recent_file[0]} with date {most_recent_file[1]}")
     print(f"Second most recent file (last siege): {second_most_recent_file[0]} with date {second_most_recent_file[1]}")
 
+    # Check if file has a tilde character and show error and exit
+    for file in [most_recent_file, second_most_recent_file]:
+        if '~' in file[0]:
+            raise SystemExit(f"Error: The file '{file[0]}' appears to be a temporary file. Please close any open instances of this file and try again.")
+
     if not skip_confirmation:
         confirmation = input("Do you want to proceed with these files? (yes/no): ").strip().lower()
         if confirmation not in ['yes', 'y']:
