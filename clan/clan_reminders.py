@@ -1,108 +1,25 @@
+from clan.events import Event, get_event
 from discord_api.discordClient import DiscordAPI
 import datetime
 import configparser
 from typing import List
 import asyncio
 import inspect
-from clan.reminder_sent_store import ReminderSentStore
 import signal
 from logger import get_logger
+from reminder import Reminder
 
 # Module logger
 logger = get_logger(__name__)
 
-class Reminder:
-    def __init__(self, event_name: str, reminder_day: int, discord_client: DiscordAPI = None, send_func=None, utc_time: int = None, sent_store: ReminderSentStore = None):
-        self.event_name = event_name
-        self.reminder_day = reminder_day  # 0=Monday, 1=Tuesday, ..., 6=Sunday
-        self.send_func = send_func
-        self.discord_client = discord_client
-        self.utc_time = utc_time
-        self.sent_store = sent_store or ReminderSentStore()
-        self.channel = "announcements"  # Default channel
+EVENT_FREQUENCIES_SECTION = "EventFrequencies"
+EVENT_START_WEEK_SECTION = "EventStartWeek"
+EVENT_NAME_MAP = {
+    "siege": Event.SIEGE,
+    "hydra": Event.HYDRA_CLASH,
+    "chimera": Event.CHIMERA_CLASH,
+}
 
-    @staticmethod
-    def from_config(reminder_name: str, config: configparser.ConfigParser, discord_client: DiscordAPI = None, sent_store: ReminderSentStore = None) -> 'Reminder':
-        """
-        Create a Reminder instance from the config for a given reminder name.
-        Args:
-            reminder_name (str): The name of the reminder (e.g., 'Hydra', 'Chimera').
-            config (configparser.ConfigParser): The loaded config object.
-            discord_client (DiscordAPI): The Discord API client instance.
-        Returns:
-            Reminder: The instantiated Reminder object, or raises KeyError if not found.
-        """
-        if "Reminders" not in config:
-            raise KeyError(f"No 'Reminders' section in config.")
-        rem_cfg = config["Reminders"]
-        if reminder_name not in rem_cfg:
-            raise KeyError(f"No reminder named '{reminder_name}' in config.")
-        reminder_day = int(rem_cfg.get(reminder_name))
-        utc_time = None
-        if "ReminderTimes" in config:
-            utc_time_str = config["ReminderTimes"].get(reminder_name.lower())
-            if utc_time_str is not None:
-                try:
-                    utc_time = int(utc_time_str)
-                except Exception:
-                    utc_time = None
-        # Get the target channel from config
-        channel = None
-        if "Channels" in config:
-            channel = config["Channels"].get("reminders")
-        reminder = Reminder(event_name=reminder_name, reminder_day=reminder_day, discord_client=discord_client, utc_time=utc_time, sent_store=sent_store)
-        reminder.channel = channel or "announcements"
-        return reminder
-
-    def clear(self) -> None:
-        """
-        Clears the sent flag for this reminder for the current guild.
-        """
-        self.sent_store.clear(self.discord_client.guild_id, self.event_name)
-
-    def should_send(self, day: datetime.date) -> bool:
-        """
-        Determines if the reminder should be sent for the given day and current time, based on config and reminder times.
-        Args:
-            day (datetime.date): The current date.
-        Returns:
-            bool: True if the reminder should be sent, False otherwise.
-        """
-        weekday = day.weekday()
-        guild_id = self.discord_client.guild_id
-        # Check if already sent today
-        last_sent = self.sent_store.get(guild_id, self.event_name)
-        if last_sent == str(day):
-            print(f"[Reminder: {self.event_name}] Not sending: already sent today for guild {guild_id}.")
-            return False
-        # Check if today is the correct reminder day
-        if weekday != self.reminder_day:
-            print(f"[Reminder: {self.event_name}] Not sending: today (weekday={weekday}) is not the configured reminder day ({self.reminder_day}) for guild {guild_id}.")
-            return False
-        # Check if current UTC hour is after the configured reminder time
-        hour = self.utc_time
-        if hour is not None:
-            now_utc = datetime.datetime.now(datetime.timezone.utc)
-            if now_utc.hour < hour:
-                print(f"[Reminder: {self.event_name}] Not sending: current UTC hour ({now_utc.hour}) is before configured reminder hour ({hour}) for guild {guild_id}.")
-                return False
-        return True
-
-    async def send(self, day: datetime.date) -> None:
-        """
-        Sends the reminder and tracks the sent status in the config. Assumes all checks are done by caller.
-        Args:
-            day (datetime.date): The current date.
-        """
-        # Get send channel for reminders from config
-        if self.send_func:
-            if inspect.iscoroutinefunction(self.send_func):
-                await self.send_func(self.discord_client, self.channel)
-            else:
-                self.send_func(self.discord_client, self.channel)
-        else:
-            raise ValueError(f"No send function defined for reminder '{self.event_name}'")
-        self.sent_store.set(self.discord_client.guild_id, self.event_name, str(day))
 
 async def send_reminder_with_role(discord_client: DiscordAPI, message_body: str, role_name: str = "Member", channel: str = "announcements") -> None:
     """
@@ -124,6 +41,7 @@ async def send_hydra_reminder(discord_client: DiscordAPI, channel: str) -> None:
     Sends a reminder message to the announcement channel that there is less than 24 hours left to do Hydra.
     Args:
         discord_client (DiscordAPI): The Discord API client instance.
+        channel (str): The channel to send the message to.
     """
     message_body = (
         ":dragon_face: **Hydra Reminder!** :dragon_face:\n"
@@ -137,11 +55,33 @@ async def send_chimera_reminder(discord_client: DiscordAPI, channel: str) -> Non
     Sends a reminder message to the announcement channel that there is less than 24 hours left to do Chimera.
     Args:
         discord_client (DiscordAPI): The Discord API client instance.
+        channel (str): The channel to send the message to.
     """
     message_body = (
         ":japanese_ogre: **Chimera Reminder!** :japanese_ogre:\n"
         "There are less than 24 hours left to do your Chimera attempts!\n"
         "Make sure to participate and help the clan!"
+    )
+    await send_reminder_with_role(discord_client, message_body, channel=channel)
+
+async def send_siege_reminder(discord_client: DiscordAPI, channel: str, reminder_num: int) -> None:
+    """
+    Sends a siege reminder message to the specified channel, indicating the remaining time based on reminder number.
+    Args:
+        discord_client (DiscordAPI): The Discord API client instance.
+        channel (str): The channel to send the message to.
+        reminder_num (int): The reminder number (1 for 48 hours, 2 for 24 hours).
+    """
+    if reminder_num == 1:
+        remaining = "48 hours"
+    elif reminder_num == 2:
+        remaining = "24 hours"
+    else:
+        raise ValueError(f"Invalid reminder_num: {reminder_num}. Must be 1 or 2.")
+    message_body = (
+        f":crossed_swords: **Siege Reminder!** :crossed_swords:\n"
+        f"There are less than {remaining} left to set your Siege Defenses!\n"
+        "Don't forget to participate and help the clan!"
     )
     await send_reminder_with_role(discord_client, message_body, channel=channel)
 
@@ -165,7 +105,8 @@ def initialize_reminders(config_path: str = "guild_config.ini", discord_client: 
             func_name = f"send_{reminder_name.lower()}_reminder"
             send_func = globals().get(func_name)
             if send_func is not None:
-                reminder = Reminder.from_config(reminder_name, config, discord_client=discord_client)
+                event = get_event(reminder_name)
+                reminder = Reminder.from_config(reminder_name, config, event_type=event, discord_client=discord_client)
                 reminder.send_func = send_func  # Ensure correct function is set
                 reminders.append(reminder)
             else:
@@ -186,7 +127,13 @@ async def daily_callback_template(day: datetime.date, reminders: List[Reminder])
             reminder.clear()
     for reminder in reminders:
         if reminder.should_send(day):
-            await reminder.send(day)
+            if len(reminder.reminder_days) > 1:
+                reminder_num = reminder.reminder_number(day)
+                print(f"Sending reminder #{reminder_num} for {reminder.event_name} on {day}")
+                await reminder.send(day, reminder_num)
+            else:
+                print(f"Sending reminder for {reminder.event_name} on {day}")
+                await reminder.send(day)
 
 
 async def heartbeat(discord_client: DiscordAPI, stop_event: asyncio.Event, channel: str = "heartbeat", interval: float = 1) -> None:
